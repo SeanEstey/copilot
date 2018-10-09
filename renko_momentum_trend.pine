@@ -5,7 +5,7 @@
 // Suggestions:
 // Pair         Box Size        Timeframe
 // EURCAD       0.0001          240m
-// BTCUSD       10-50           240m
+// BTCUSD       1               240m
 // ETHUSD       0.1-1.0         240m
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -25,9 +25,9 @@ t_start     = timestamp(y1, m1, d1, 00, 00)
 t_end       = timestamp(y2, m2, d2, 23, 59)
 channel2    = input(true, title="Renko Channel On/Off")
 RST         = input(title='Renko Channel length', type=integer, defval=1)           // color zone length
-macd_fast   = input(title="MACD Fast Length", defval=12)
-macd_slow   = input(title="MACD Slow Length", defval=26)
-macd_signal = input(title="MACD Signal Length", defval=9)
+macd_fast   = input(title="MACD Fast Length", defval=3)
+macd_slow   = input(title="MACD Slow Length", defval=10)
+macd_signal = input(title="MACD Signal Length", defval=16)
 macd_histo_width = input(title="MACD Histogram Thickness", defval=5)
 len0        = input(5, minval=1, title="EMA 1")
 len02       = input(8, minval=1, title="EMA 2")
@@ -79,25 +79,27 @@ vl1 = ema(lowest(avg(high, close), slow), 8)
 e_ema1 = ema(close, 1)
 e_ema2 = ema(e_ema1, 1)
 e_ema3 = ema(e_ema2, 1)
-tema = 1 * (e_ema1 - e_ema2) + e_ema3
+tema = 1 * (e_ema1 - e_ema2) + e_ema3                   // triple EMA
 e_e1 = ema(close, 8)
 e_e2 = ema(e_e1, 5)
-dema = 2 * e_e1 - e_e2
+dema = 2 * e_e1 - e_e2                                  // double EMA
 signal = tema > dema ? max(vh1, vl1) : min(vh1, vl1)
-sig1_1 = tema > dema and signal > low and (signal-signal[1] > signal[1]-signal[2])
-sig1_2 = tema < dema and signal < high and (signal[1]-signal > signal[2]-signal[1])
+ema_up = tema > dema and signal > low and (signal-signal[1] > signal[1]-signal[2])
+ema_down = tema < dema and signal < high and (signal[1]-signal > signal[2]-signal[1])
 
 // Signal 2 (Modified Rajandran R Supertrend)
 // Trend == 1 (up), Trend == -1 (down)
 Up=hl2-(Factor*atr(Pd))
 Dn=hl2+(Factor*atr(Pd))
-TrendUp = na, TrendDown = na, Trend = na
-TrendUp := close[1]>TrendUp[1]? max(Up,TrendUp[1]) : Up
-TrendDown := close[1]<TrendDown[1]? min(Dn,TrendDown[1]) : Dn
-Trend := close > TrendDown[1] ? 1: close< TrendUp[1]? -1: nz(Trend[1],0)
+trend_up = na, trend_down = na, trend = na
+trend_up := close[1] > trend_up[1] ? max(Up, trend_up[1]) : Up
+trend_down := close[1] < trend_down[1] ? min(Dn, trend_down[1]) : Dn
+trend := close > trend_down[1] ? 1 : close < trend_up[1] ? -1: nz(trend[1],0)
 
 // Directional Projection
 hullma(src, length)=>wma(2*wma(src, length/2)-wma(src, length), round(sqrt(length)))
+// Hull
+_hullma = hullma(hma_src, hma_base_length+hma_length_scalar*6)
 
 //-----------------------------------------------------------------------------------------------------
 // Plots & Styling
@@ -107,12 +109,17 @@ hullma(src, length)=>wma(2*wma(src, length/2)-wma(src, length), round(sqrt(lengt
 //-----------------------------------------------------------------------------------------------------
 
 // Renko channel
-ul2 = plot(channel2?last8h:last8h==nz(last8h[1])?last8h:na, color=white, linewidth=1, style=circles, title="Renko Channel top", transp=75, offset=0)
-ll2 = plot(channel2?lastl8:lastl8==nz(lastl8[1])?lastl8:na, color=white, linewidth=1, style=circles, title="Renko Channel bottom", transp=75, offset=0)
-fill(ul2, ll2, color=black, transp=95, title="Renko Channel")
+ul2 = plot(channel2?last8h:last8h==nz(last8h[1])?last8h:na, color=white, linewidth=1, style=circles, title="Renko Channel top", transp=100, offset=0)
+ll2 = plot(channel2?lastl8:lastl8==nz(lastl8[1])?lastl8:na, color=white, linewidth=1, style=circles, title="Renko Channel bottom", transp=100, offset=0)
+//fill(ul2, ll2, color=black, transp=95, title="Renko Channel")
+
+// HMA
+plot(not show_hma ? na : _hullma, color=fuchsia, linewidth=1, transp=0, title="Hull MA")
+
 // S/R channel
-fill(ul2, RT2, color=red, transp=95, title="Fill")
-fill(ll2, RB2, color=green, transp=95 , title="Fill")
+//fill(ul2, RT2, color=red, transp=93, title="Fill")
+//fill(ll2, RB2, color=green, transp=93 , title="Fill")
+
 // MACD
 //plot(macd_pos_up, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0)
 //plot(macd_pos_down, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0, transp=85)
@@ -120,32 +127,49 @@ fill(ll2, RB2, color=green, transp=95 , title="Fill")
 //plot(macd_neg_up, linewidth=macd_histo_width, color=red, style=histogram, histbase=0.0, transp=85)
 
 // EMA 1
-plot_color = direction > 0  ? #008000 : direction < 0 ? red : na
-plot(ema0, title="EMA", style=line, linewidth=1, color = plot_color)
+//plot_color = direction > 0  ? #008000 : direction < 0 ? red : na
+//plot(ema0, title="EMA", style=line, linewidth=1, color = plot_color)
+
 // EMA 2
-plot_color2 = direction2 > 0  ? #008000 : direction2 < 0 ? red : na
-plot(ema02, title="EMA Signal 2", style=line, linewidth=1, color = plot_color2)
+//plot_color2 = direction2 > 0  ? #008000 : direction2 < 0 ? red : na
+//plot(ema02, title="EMA Signal 2", style=line, linewidth=1, color = plot_color2)
 
-// Signal 1
-plotshape(sig1_1 and direction > 0 ? 1 : na, title="Uptrend Continuation", color=green, style=shape.triangleup, size=size.tiny, location=location.belowbar)
-plotshape(sig1_2 and direction < 0 ? -1 : na, title="Downtrend Continuation", color=red, style=shape.triangledown, size=size.tiny, location=location.abovebar)
+// Signal 1 (Trend Continuation)
+//plotshape(ema_up, title="Uptrend Continuation", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.belowbar)
+//plotshape(ema_down, title="Downtrend Continuation", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.abovebar)
 
-// Signal 2 (trend reversal)
-plotshape(Trend == 1 and Trend[1] == -1 ? 1 : na, title="Long Entry", color=green, style=shape.labelup, size=size.small, location=location.belowbar)
-plotshape(Trend == -1 and Trend[1] == 1 ? -1 : na, title="Short Entry", color=red, style=shape.labeldown, size=size.small, location=location.abovebar)
-
-// Hull
-plot(not show_hma ? na : hullma(hma_src, hma_base_length+hma_length_scalar*6), color=fuchsia, linewidth=3, title="Hull MA")
+// Signal 2 (Trend Reversal)
+//plotshape(trend == 1 and trend[1] == -1 ? 1 : na, title="Trend Reversal", color=fuchsia, style=shape.labelup, transp=0, size=size.tiny, location=location.belowbar)
+//plotshape(trend == -1 and trend[1] == 1 ? -1 : na, title="Trend Reversal", color=fuchsia, style=shape.labeldown, transp=0, size=size.tiny, location=location.abovebar)
 
 //-----------------------------------------------------------------------------------------------------
-// Manage positions
-// Open position on confluence of EMA's, Trend, and MACD. Close position on trend change.
+// Signals & Position Management
+// Enter position on A) Renko trend direction, B) Hull MA slope, and C) 3+ MACD bars
+// Exit on MACD reversal
 //-----------------------------------------------------------------------------------------------------
-go_long = tema > dema and signal > low and (signal-signal[1] > signal[1]-signal[2]) and Trend == 1 and (_histo > _histo[1] and _histo > 0)
-go_short = tema < dema and signal < high and (signal[1]-signal > signal[2]-signal[1]) and Trend == -1 and (_histo < _histo[1] and _histo < 0)
 
-strategy.close("Long", when = strategy.position_size > 0 and Trend == -1 and Trend[1] == 1 and window())
-strategy.close("Short", when = strategy.position_size < 0 and Trend == 1 and Trend[1] == -1 and window())
+go_long = _hullma > _hullma[1] and trend == 1 and barssince(_histo < 0) >= 3 ? 1 : 0
+go_short = _hullma < _hullma[1] and trend == -1 and barssince(_histo > 0) >= 3 ? 1 : 0
 
-strategy.entry("Long", strategy.long,  when = go_long and window())
-strategy.entry("Short", strategy.short, when = go_short and window())
+// MACD reversal
+close_long = _histo < 0 and _histo[1] >= 0 and barssince(go_long == 1) < barssince(go_short == 1)
+close_short = _histo > 0 and _histo[1] <= 0 and barssince(go_short == 1) < barssince(go_long == 1)
+
+plotshape(go_long ? 1 : na, title="Long Entry", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar)
+plotshape(go_short ? 1 : na, title="Short Entry", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar)
+
+plotshape(close_long ? 1 : na, title="Long Exit", color=green, style=shape.flag, size=size.small, transp=0, location=location.belowbar)
+plotshape(close_short ? 1 : na, title="Short Exit", color=red, style=shape.flag, size=size.small, transp=0, location=location.abovebar)
+
+strategy.close("LONG", when = close_long and strategy.position_size > 0 and window())
+strategy.close("SHORT", when = close_short and strategy.position_size < 0 and window())
+
+strategy.entry("LONG", strategy.long,  when = go_long and strategy.position_size <= 0 and window())
+strategy.entry("SHORT", strategy.short, when = go_short and strategy.position_size >= 0 and window())
+
+//-----------------------------------------------------------------------------------------------------
+// Alerts (Indicator only)
+//-----------------------------------------------------------------------------------------------------
+
+// alertcondition(go_long and go_long[1] == -1, title='Renko Long Entry', message='Renkonator uptrend. Pamp it!')
+// alertcondition(go_short and go_short[1] == -1, title='Renko Short Entry', message='Renkonator downtrend. Damp it!')
