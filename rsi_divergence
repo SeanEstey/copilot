@@ -1,0 +1,38 @@
+//@version=3
+strategy("RSI Divergence", overlay=true, calc_on_every_tick=true)
+
+n = 2
+// @TODO: use this var to tell if we are checking in real-time to determine div. results may be uncertain until the bar closes
+//unconfirmed = barstate.isrealtime // or within range of n?
+lookback = input(title="Lookback", defval=4, minval=1, type=integer)
+
+length = input(14)
+
+price = close
+
+rsiPeak = (rsi(close[n+2], length) < rsi(close[n], length)) and (rsi(close[n+1], length) < rsi(close[n], length)) and (rsi(close[n-1], length) < rsi(close[n], length)) and (rsi(close[n-2], length) < rsi(close[n], length))
+rsiTrough = (rsi(close[n+2], length) > rsi(close[n], length)) and (rsi(close[n+1], length) > rsi(close[n], length)) and (rsi(close[n-1], length) > rsi(close[n], length)) and (rsi(close[n-2], length) > rsi(close[n], length))
+rsiFractal = rsiPeak or rsiTrough
+
+// so determining this stuff is tricky because it has to have the offset (n) taken into account
+BR = rsiPeak and ((close[n] >= valuewhen(rsiPeak[1], close[n], 0)) and (rsi(close[n], length) <= rsi(valuewhen(rsiPeak[1], close[n], 0), length)))
+HBR = rsiPeak and ((close[n] <= valuewhen(rsiPeak[1], close[n], 0)) and (rsi(close[n], length) >= rsi(valuewhen(rsiPeak[1], close[n], 0), length)))
+BL = rsiTrough and ((close[n] <= valuewhen(rsiTrough[1], low[n], 0)) and (rsi(close[n], length) >= rsi(valuewhen(rsiTrough[1], close[n], 0), length)))
+HBL = rsiTrough and ((close[n] >= valuewhen(rsiTrough[1], low[n], 0)) and (rsi(close[n], length) <= rsi(valuewhen(rsiTrough[1], close[n], 0), length)))
+
+// for debugging purposes.
+//plotshape(rsiPeak, style=shape.diamond, text='P', color=purple, offset=-n, location=location.abovebar) // peak
+//plotshape(rsiTrough, style=shape.diamond, text='T', color=purple, offset=-n, location=location.belowbar) // trough
+
+plotshape(BR, style=shape.diamond, text='BR', color=red, offset=-n, location=location.abovebar)
+plotshape(HBR, style=shape.diamond, text='HBR', color=red, offset=-n, location=location.abovebar)
+plotshape(BL, style=shape.diamond, text='BL', color=green, offset=-n, location=location.belowbar)
+plotshape(HBL, style=shape.diamond, text='HBL', color=green, offset=-n, location=location.belowbar)
+
+// the strategy entries are pretty bad, don't pay much attention to it. rather, look at what is plotted on the chart
+// if ((BL or HBL) and not (BR or HBR))
+//     strategy.entry("DivLE", strategy.long, comment="DivLE")
+// if ((BR or HBR) and not (BL or HBL))
+//     strategy.entry("DivSE", strategy.short, comment="DivSE")
+
+barcolor(color = ((BR or HBR) ? maroon : ((BL or HBL) ? blue : na)), offset=-n)
