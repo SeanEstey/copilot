@@ -1,175 +1,128 @@
-///////////////////////////////////////////////////////////////////////////////
-// Renko scalping script based off Vdub Renko SniperVX1 v1. Major addition is
-// requiring confluence of MACD signal for opening positions.
-// Important: use Traditional setting with Renko. Box Size and timeframe are the two most important settings to optimize for.
-// Suggestions:
-// Pair         Box Size        Timeframe
-// EURCAD       0.0001          240m
-// BTCUSD       1               240m
-// ETHUSD       0.1-1.0         240m
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Renko scalping script based loosely off Vdub Renko SniperVX1 v1.
+// Instructions: Switch to 1m TF w/ Renko candles (requires Pro paid acct). Set Box Size to Traditional (not ATR) and manually test optimal value.
+// Suggestions: 
+//      PAIR    BOX SIZE    TF
+//      EURCAD  ???         1m
+//      BTCUSD  50-100      1m
+//      ETHUSD  1.0-3.0     1m
+// MACD settings:
+//      FAST    SLOW    PERIOD
+//      3       10      16      (default)
+//      12      26      9       (conventional)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //@version=3
-strategy("Renkonator 5000 [STRAT]", overlay=true, initial_capital=10000)
+study(title="Renkonator 5000 [IND]", overlay=true)
 
-//-----------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------
 // Init
-//-----------------------------------------------------------------------------------------------------
-m1          = input(title="From Month", defval=6, minval=1, maxval=12)
-d1          = input(title="From Day", defval=1, minval = 1, maxval=31)
-y1          = input(title="From Year", defval=2018, minval=2013)
-m2          = input(title="To Month", defval=1, minval=1, maxval=12)
-d2          = input(title="To Day", defval=1, minval=1, maxval=31)
-y2          = input(title="To Year", defval=9999, minval=2017)
-t_start     = timestamp(y1, m1, d1, 00, 00)
-t_end       = timestamp(y2, m2, d2, 23, 59)
-channel2    = input(true, title="Renko Channel On/Off")
-RST         = input(title='Renko Channel length', type=integer, defval=1)           // color zone length
-macd_fast   = input(title="MACD Fast Length", defval=3)
-macd_slow   = input(title="MACD Slow Length", defval=10)
-macd_signal = input(title="MACD Signal Length", defval=16)
-macd_histo_width = input(title="MACD Histogram Thickness", defval=5)
-len0        = input(5, minval=1, title="EMA 1")
-len02       = input(8, minval=1, title="EMA 2")
-fast        = input(5, minval=1, title="Short Signal Generator")                    // Signal 1
-slow        = input(8, minval=1)                                                    // Signal 1
-Factor      = input(1, minval=1,maxval = 1000, title="Trend Transition Signal")     // Signal 2
-Pd          = input(1, minval=1,maxval = 1000, title="Period")                      // Signal 2
-show_hma    = input(true, title="Display Hull MA Set:")                             // Hull
-hma_src     = input(close, title="Hull MA's Source:")                               // Hull
-hma_base_length = input(8, minval=1, title="Hull MA's Base Length:")                // Hull
-hma_length_scalar = input(5, minval=0, title="Hull MA's Length Scalar:")            // Hull
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+m1          = input(title="From Month", defval=6, minval=1, maxval=12)              // Strat Backtest
+d1          = input(title="From Day", defval=1, minval = 1, maxval=31)              // Strat Backtest
+y1          = input(title="From Year", defval=2018, minval=2013)                    // Strat Backtest
+m2          = input(title="To Month", defval=1, minval=1, maxval=12)                // Strat Backtest
+d2          = input(title="To Day", defval=1, minval=1, maxval=31)                  // Strat Backtest
+y2          = input(title="To Year", defval=9999, minval=2017)                      // Strat Backtest
+t_start     = timestamp(y1, m1, d1, 00, 00)                                         // Strat Backtest
+t_end       = timestamp(y2, m2, d2, 23, 59)                                         // Strat Backtest
+channel2    = input(true, title="Renko Channel On/Off")                             // Renko S/R
+src         = input(close, title="Renko Channel")                                   // Renko S/R
+RST         = input(title='Renko Channel length', type=integer, defval=1)           // Renko S/R
+macd_fast   = input(title="MACD Fast Length", defval=3)                             // MACD
+macd_slow   = input(title="MACD Slow Length", defval=10)                            // MACD
+macd_signal = input(title="MACD Signal Length", defval=16)                          // MACD
+macd_histo_width = input(title="MACD Histogram Thickness", defval=5)                // MACD
+factor      = input(1, minval=1,maxval = 1000, title="Trend Transition Signal")     // Signal 2
+pd          = input(1, minval=1,maxval = 1000, title="Period")                      // Signal 2
+show_hma    = input(true, title="Display Hull MA Set:")                             // Hull MA
+hma_src     = input(close, title="Hull MA's Source:")                               // Hull MA
+hma_slow_base_length = input(8, minval=1, title="HMA Slow Base Length:")            // Hull MA
+hma_slow_length_scalar = input(5, minval=0, title="HMA Slow Length Scalar:")        // Hull MA
+hma_fast_base_length = input(8, minval=1, title="HMA Fast Base Length:")            // Hull MA
+hma_fast_length_scalar = input(1, minval=0, title="HMA Fast Length Scalar:")        // Hull MA
+
+// Functions
 window()    => time >= t_start and time <= t_end ? true : false
-
-// MACD
-[_macd, _sig, _histo] = macd(close, macd_fast, macd_slow, macd_signal)
-macd_pos_up = _histo > _histo[1] and _histo > 0 ? _histo : na
-macd_pos_down = _histo <= _histo[1] and _histo > 0 ? _histo : na
-macd_neg_down = _histo < _histo[1] and _histo < 0 ? _histo : na
-macd_neg_up = _histo >= _histo[1] and _histo < 0 ? _histo : na
-
-// Candle body resistance Channel
-len = 34
-src = input(close, title="Renko Channel")
-out = sma(src, len)
-last8h = highest(close, 13)
-lastl8 = lowest(close, 13)
-bearish = cross(close,out) == 1 and falling(close, 1)
-bullish = cross(close,out) == 1 and rising(close, 1)
-
-// Moddified [RS]Support and Resistance V0
-RSTT = valuewhen(high >= highest(high, RST), high, 0)
-RSTB = valuewhen(low <= lowest(low, RST), low, 0)
-RT2 = plot(RSTT, color=RSTT != RSTT[1] ? na : red, linewidth=1, offset=+0)
-RB2 = plot(RSTB, color=RSTB != RSTB[1] ? na : green, linewidth=1, offset=0)
-
-// Trend colour ema
-src0 = close
-ema0 = ema(src0, len0)
-direction = rising(ema0, 2) ? +1 : falling(ema0, 2) ? -1 : 0
-
-// Trend colour ema 2
-src02 = close
-ema02 = ema(src02, len02)
-direction2 = rising(ema02, 2) ? +1 : falling(ema02, 2) ? -1 : 0
-
-// Signal 1 (Configured ema signal output)
-vh1 = ema(highest(avg(low, close), fast), 5)
-vl1 = ema(lowest(avg(high, close), slow), 8)
-e_ema1 = ema(close, 1)
-e_ema2 = ema(e_ema1, 1)
-e_ema3 = ema(e_ema2, 1)
-tema = 1 * (e_ema1 - e_ema2) + e_ema3                   // triple EMA
-e_e1 = ema(close, 8)
-e_e2 = ema(e_e1, 5)
-dema = 2 * e_e1 - e_e2                                  // double EMA
-signal = tema > dema ? max(vh1, vl1) : min(vh1, vl1)
-ema_up = tema > dema and signal > low and (signal-signal[1] > signal[1]-signal[2])
-ema_down = tema < dema and signal < high and (signal[1]-signal > signal[2]-signal[1])
-
-// Signal 2 (Modified Rajandran R Supertrend)
-// Trend == 1 (up), Trend == -1 (down)
-Up=hl2-(Factor*atr(Pd))
-Dn=hl2+(Factor*atr(Pd))
-trend_up = na, trend_down = na, trend = na
-trend_up := close[1] > trend_up[1] ? max(Up, trend_up[1]) : Up
-trend_down := close[1] < trend_down[1] ? min(Dn, trend_down[1]) : Dn
-trend := close > trend_down[1] ? 1 : close < trend_up[1] ? -1: nz(trend[1],0)
-
-// Directional Projection
 hullma(src, length)=>wma(2*wma(src, length/2)-wma(src, length), round(sqrt(length)))
-// Hull
-_hullma = hullma(hma_src, hma_base_length+hma_length_scalar*6)
 
-//-----------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Signal Generation
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+[_macd, _sig, _histo] = macd(close, macd_fast, macd_slow, macd_signal)              // MACD
+macd_pos_up = _histo > _histo[1] and _histo > 0 ? _histo : na                       // MACD
+macd_pos_down = _histo <= _histo[1] and _histo > 0 ? _histo : na                    // MACD
+macd_neg_down = _histo < _histo[1] and _histo < 0 ? _histo : na                     // MACD
+macd_neg_up = _histo >= _histo[1] and _histo < 0 ? _histo : na                      // MACD
+
+last8h = highest(close, 13)                                                         // S/R
+lastl8 = lowest(close, 13)                                                          // S/R
+RSTT = valuewhen(high >= highest(high, RST), high, 0)                               // S/R
+RSTB = valuewhen(low <= lowest(low, RST), low, 0)                                   // S/R
+RT2 = plot(RSTT, color = RSTT != RSTT[1] ? na : red, linewidth=1, offset=+0)        // S/R
+RB2 = plot(RSTB, color = RSTB != RSTB[1] ? na : green, linewidth=1, offset=0)       // S/R
+renko_top = channel2 ? last8h: last8h == nz(last8h[1]) ? last8h : na                // S/R
+renko_bot = channel2 ? lastl8: lastl8 == nz(lastl8[1]) ? lastl8 : na                // S/R
+
+// Rajandran Supertrend (1==up, -1==down)
+Up=hl2 - (factor * atr(pd))                                                         // Trend
+Dn=hl2 + (factor * atr(pd))                                                         // Trend
+trend_up = na, trend_down = na, trend = na                                          // Trend
+trend_up := close[1] > trend_up[1] ? max(Up, trend_up[1]) : Up                      // Trend
+// trend_rev_up = trend == 1 and trend[1] == -1 ? 1 : na                            // Trend
+trend_down := close[1] < trend_down[1] ? min(Dn, trend_down[1]) : Dn                // Trend
+// trend_rev_down = trend == -1 and trend[1] == 1 ? -1 : na                         // Trend
+trend := close > trend_down[1] ? 1 : close < trend_up[1] ? -1: nz(trend[1],0)       // Trend
+
+hma_slow = hullma(hma_src, hma_slow_base_length + hma_slow_length_scalar * 6)       // Hull MA
+hma_fast = hullma(hma_src, hma_fast_base_length + hma_fast_length_scalar * 6)       // Hull MA
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
 // Plots & Styling
-// Up candle bg: #b6d7a8, border: #6aa84f
-// Down candle bg: #ea9999f7, border: #e06666
-// EMA dark green: #008000
-//-----------------------------------------------------------------------------------------------------
+// Upblock: #b6d7a8, border: #6aa84f, Downblock: #ea9999f7, border: #e06666
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+ul2 = plot(renko_top, color=#e06666, linewidth=1, style=circles, title="Renko Channel top", transp=25, offset=0)                                    // S/R
+ll2 = plot(renko_bot, color=#6aa84f, linewidth=1, style=circles, title="Renko Channel bottom", transp=25, offset=0)                                 // S/R
+fill(ul2, ll2, color=black, transp=95, title="Renko Channel")                                                                                       // S/R
+fill(ul2, RT2, color=red, transp=93, title="Fill")                                                                                                  // S/R
+fill(ll2, RB2, color=green, transp=93 , title="Fill")                                                                                               // S/R
+plot(not show_hma ? na : hma_slow, color=orange, linewidth=2, transp=0, title="HMA Slow")                                                           // Hull MA
+plot(not show_hma ? na : hma_fast, color=teal, linewidth=2, transp=0, title="HMA Fast")                                                             // Hull MA
+// plot(macd_pos_up, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0)                                                         // MACD
+// plot(macd_pos_down, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0, transp=85)                                            // MACD
+// plot(macd_neg_down, linewidth=macd_histo_width, color=red, style=histogram, histbase=0.0)                                                        // MACD
+// plot(macd_neg_up, linewidth=macd_histo_width, color=red, style=histogram, histbase=0.0, transp=85)                                               // MACD
+// plotshape(ema_up, title="Uptrend", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.belowbar)                       // Trends
+// plotshape(ema_down, title="Downtrend", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.abovebar)                   // Trends
+// plotshape(trend_rev_up, title="New Uptrend", color=fuchsia, style=shape.labelup, transp=0, size=size.tiny, location=location.belowbar)           // Trends
+// plotshape(trend_rev_down, , title="New Downtrend", color=fuchsia, style=shape.labeldown, transp=0, size=size.tiny, location=location.abovebar)   // Trends
 
-// Renko channel
-ul2 = plot(channel2?last8h:last8h==nz(last8h[1])?last8h:na, color=white, linewidth=1, style=circles, title="Renko Channel top", transp=100, offset=0)
-ll2 = plot(channel2?lastl8:lastl8==nz(lastl8[1])?lastl8:na, color=white, linewidth=1, style=circles, title="Renko Channel bottom", transp=100, offset=0)
-//fill(ul2, ll2, color=black, transp=95, title="Renko Channel")
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Position Management
+// Manually tracks positions on Indicator as autoview requires alerts, which are unavailable in Pine strategies.
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+go_long = na, go_short = na, flat = na, is_long = na, is_short = na, close_long = na, close_short = na
+go_long := crossover(hma_fast, hma_slow) and macd_pos_up
+//close_long := barssince(go_long == true) < barssince(go[_short == true) and low <= hma_fast //and not close_long[1]
+go_short := crossunder(hma_fast, hma_slow) and macd_neg_down
+//close_short := barssince(go_short == true) < barssince(go_long == true) and high >= hma_fast //and not close_short[1]
+flat := not go_long and not go_short
+// Plot Long positions
+plotshape(go_long and window(), title="Long Entry", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar, text="Long")
+//plotshape(bullish and not close_long and not close_long[1] and window(), title="In Long", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar)
+//plotshape(close_long and window(), title="Long Exit", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar, text="Exit")
+// Plot Short positions
+plotshape(go_short and window(), title="Short Entry", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar, text="Short")
+//plotshape(bearish and not close_short and not close_short[1] and window(), title="In Short", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar)
+//plotshape(close_short and window(), title="Short Exit", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar, text="Exit")
+//plotshape(flat and in_long[1] and window(), title="Long Exit", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar, text="Exit")
+//plotshape(flat and in_short[1] and window(), title="Short Exit", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar, text="Exit")
+//plotshape(flat and flat[1] and window(), title="Flat", color=black, style=shape.diamond, size=size.tiny, transp=0, location=location.abovebar)
 
-// HMA
-plot(not show_hma ? na : _hullma, color=fuchsia, linewidth=1, transp=0, title="Hull MA")
-
-// S/R channel
-//fill(ul2, RT2, color=red, transp=93, title="Fill")
-//fill(ll2, RB2, color=green, transp=93 , title="Fill")
-
-// MACD
-//plot(macd_pos_up, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0)
-//plot(macd_pos_down, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0, transp=85)
-//plot(macd_neg_down, linewidth=macd_histo_width, color=red, style=histogram, histbase=0.0)
-//plot(macd_neg_up, linewidth=macd_histo_width, color=red, style=histogram, histbase=0.0, transp=85)
-
-// EMA 1
-//plot_color = direction > 0  ? #008000 : direction < 0 ? red : na
-//plot(ema0, title="EMA", style=line, linewidth=1, color = plot_color)
-
-// EMA 2
-//plot_color2 = direction2 > 0  ? #008000 : direction2 < 0 ? red : na
-//plot(ema02, title="EMA Signal 2", style=line, linewidth=1, color = plot_color2)
-
-// Signal 1 (Trend Continuation)
-//plotshape(ema_up, title="Uptrend Continuation", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.belowbar)
-//plotshape(ema_down, title="Downtrend Continuation", color=black, style=shape.circle, transp=50, size=size.tiny, location=location.abovebar)
-
-// Signal 2 (Trend Reversal)
-//plotshape(trend == 1 and trend[1] == -1 ? 1 : na, title="Trend Reversal", color=fuchsia, style=shape.labelup, transp=0, size=size.tiny, location=location.belowbar)
-//plotshape(trend == -1 and trend[1] == 1 ? -1 : na, title="Trend Reversal", color=fuchsia, style=shape.labeldown, transp=0, size=size.tiny, location=location.abovebar)
-
-//-----------------------------------------------------------------------------------------------------
-// Signals & Position Management
-// Enter position on A) Renko trend direction, B) Hull MA slope, and C) 3+ MACD bars
-// Exit on MACD reversal
-//-----------------------------------------------------------------------------------------------------
-
-go_long = _hullma > _hullma[1] and trend == 1 and barssince(_histo < 0) >= 3 ? 1 : 0
-go_short = _hullma < _hullma[1] and trend == -1 and barssince(_histo > 0) >= 3 ? 1 : 0
-
-// MACD reversal
-close_long = _histo < 0 and _histo[1] >= 0 and barssince(go_long == 1) < barssince(go_short == 1)
-close_short = _histo > 0 and _histo[1] <= 0 and barssince(go_short == 1) < barssince(go_long == 1)
-
-plotshape(go_long ? 1 : na, title="Long Entry", color=green, style=shape.triangleup, size=size.tiny, transp=0, location=location.belowbar)
-plotshape(go_short ? 1 : na, title="Short Entry", color=red, style=shape.triangledown, size=size.tiny, transp=0, location=location.abovebar)
-
-plotshape(close_long ? 1 : na, title="Long Exit", color=green, style=shape.flag, size=size.small, transp=0, location=location.belowbar)
-plotshape(close_short ? 1 : na, title="Short Exit", color=red, style=shape.flag, size=size.small, transp=0, location=location.abovebar)
-
-strategy.close("LONG", when = close_long and strategy.position_size > 0 and window())
-strategy.close("SHORT", when = close_short and strategy.position_size < 0 and window())
-
-strategy.entry("LONG", strategy.long,  when = go_long and strategy.position_size <= 0 and window())
-strategy.entry("SHORT", strategy.short, when = go_short and strategy.position_size >= 0 and window())
-
-//-----------------------------------------------------------------------------------------------------
-// Alerts (Indicator only)
-//-----------------------------------------------------------------------------------------------------
-
-// alertcondition(go_long and go_long[1] == -1, title='Renko Long Entry', message='Renkonator uptrend. Pamp it!')
-// alertcondition(go_short and go_short[1] == -1, title='Renko Short Entry', message='Renkonator downtrend. Damp it!')
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Position Alerts
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+alertcondition(go_long and flat[1], title='Long Entry', message='Renkonator long entry. PAMP IT!')
+alertcondition(flat and go_long[1], title='Long Exit', message='Renkonator long exit.')
+alertcondition(go_short and flat[1], title='Short Entry', message='Renkonator short entry. DUMP IT!')
+alertcondition(flat and go_short[1], title='Short Exit', message='Renkonator short exit.')
