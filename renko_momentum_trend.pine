@@ -1,6 +1,9 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Renko scalping script based loosely off Vdub Renko SniperVX1 v1.
-// Instructions: Switch to 1m TF w/ Renko candles (requires Pro paid acct). Set Box Size to Traditional (not ATR) and manually test optimal value.
+// Autoview scalping script based on Vdub Renko SniperVX1.
+// Instructions:
+//  1) Setup Autoview
+//  2) Switch to 1m TF w/ Renko candles (requires Pro paid acct). Set Box Size to Traditional (not ATR) and manually test optimal value.
+//  3) Add each of 4 alerts: Open Long, Close Long, Open Short, Close Short
 // Suggestions: 
 //      PAIR    BOX SIZE    TF
 //      EURCAD  ???         1m
@@ -95,12 +98,23 @@ go_short_sig = open_short and window()
 cl_short_sig = final_pos[1]==-1 and final_pos==0 and window()
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
-// Position Alerts
+// Autoview Alerts
+// IMPORTANT: Check alert expiration time regularly to monitor expiry dates.
+// CMD      DESC        VALUES
+// e        exchange    bitmex, okcoin, ...
+// s        symbol      xbtusd, ...
+// b        book        long, short
+// c        close       order, position
+// t        type        market, limit, ...
+// q        quantity    order size
+// l        leverage    1-50
+// Close all longs = e=okcoin s=butcusd3m c=position b=long
+// Close all shorts = e=okcoin s=butcusd3m c=position b=short
 //---------------------------------------------------------------------------------------------------------------------------------------------------
-alertcondition(go_long_sig, title='Long Entry', message='Renkonator long entry. PAMP IT!')
-alertcondition(cl_long_sig, title='Long Exit', message='Renkonator long exit.')
-alertcondition(go_short_sig, title='Short Entry', message='Renkonator short entry. DUMP IT!')
-alertcondition(cl_short_sig, title='Short Exit', message='Renkonator short exit.')
+alertcondition(go_long_sig, title='Long Entry', message='e=testmex s=ethusd b=long t=market l=10 q=1000')
+alertcondition(cl_long_sig, title='Long Exit', message='e=testmex s=ethusd c=position b=long t=market')
+alertcondition(go_short_sig, title='Short Entry', message='e=testmex s=ethusd b=short t=market l=10 q=1000')
+alertcondition(cl_short_sig, title='Short Exit', message='e=testmex s=ethusd c=position b=short t=market')
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
 // Plots & Styling
@@ -133,4 +147,4 @@ plotshape(cl_long_sig, "Long Exit", shape.triangleup, location.belowbar, green, 
 plotshape(go_short_sig, "Short Entry", shape.triangledown, location.abovebar, red, 0, 0, size=size.tiny, text="Short")                  // Positions
 plotshape(cl_short_sig, "Short Exit", shape.triangledown, location.abovebar, red, 0, 0, size=size.tiny, text="Exit\nShort")             // Positions
 // plot(position, title="Position", color=black, transp=0)     
-plot(stop ? 1 : 0, title="Stop Loss", color=black, transp=0) 
+//plot(stop ? 1 : 0, title="Stop Loss", color=black, transp=0) 
