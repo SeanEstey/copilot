@@ -112,7 +112,7 @@ cl_short_sig = final_pos[1]==-1 and final_pos==0 and window()
 // Close all longs = e=okcoin s=butcusd3m c=position b=long
 // Close all shorts = e=okcoin s=butcusd3m c=position b=short
 //---------------------------------------------------------------------------------------------------------------------------------------------------
-alertcondition(go_long_sig, title='Long Entry', message='e=bitmex-testnet e=testmex s=ethusd b=long t=market l=10 q=1000')
+alertcondition(go_long_sig, title='Long Entry', message='e=bitmex-testnet a=testmex s=ethusd b=long t=market l=10 q=1000')
 alertcondition(cl_long_sig, title='Long Exit', message='e=bitmex-testnet a=testmex s=ethusd c=position t=market')
 alertcondition(go_short_sig, title='Short Entry', message='e=bitmex-testnet a=testmex s=ethusd b=short t=market l=10 q=1000')
 alertcondition(cl_short_sig, title='Short Exit', message='e=bitmex-testnet a=testmex s=ethusd c=position t=market')
