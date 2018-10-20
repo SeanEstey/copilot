@@ -98,6 +98,15 @@ go_short_sig = open_short and window()
 cl_short_sig = final_pos[1]==-1 and final_pos==0 and window()
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
+// Tradingview Strategy Backtesting
+// Important: Comment these lines when running an indicator script.
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+strategy.close("LONG", when = cl_long_sig  and strategy.position_size > 0)
+strategy.close("SHORT", when = cl_short_sig and strategy.position_size < 0)
+strategy.entry("LONG", strategy.long,  when = go_long_sig and strategy.position_size <= 0)
+strategy.entry("SHORT", strategy.short, when = go_short_sig and strategy.position_size >= 0)
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
 // Autoview Alerts
 // IMPORTANT: Check alert expiration time regularly to monitor expiry dates.
 // CMD      DESC        VALUES
