@@ -1,0 +1,26 @@
+//@version=3
+strategy("Channel Rejection Strategy", overlay=true)
+
+length = input(title="Length", type=integer, minval=1, maxval=1000, defval=5)
+
+upBound = highest(high, length)
+downBound = lowest(low, length)
+
+longEntry = false
+shortEntry = false
+
+ma1 = sma(close, 50)
+ma2 = sma(close, 200)
+
+if (low < downBound[1])
+    if (close >= downBound[1])//close > (high + low) / 2)
+        longEntry := true
+if (high > upBound[1])
+    if (close <= upBound[1])//close < (high + low) / 2)
+        shortEntry := true
+        
+plotshape(longEntry, style=shape.diamond, text='Long', color=green, location=location.belowbar)
+plotshape(shortEntry, style=shape.diamond, text='Short', color=red, location=location.abovebar)
+
+plot(upBound[1], title="equity", color=red, linewidth=1)
+plot(downBound[1], title="equity", color=blue, linewidth=1)
