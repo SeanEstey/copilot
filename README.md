@@ -1,1 +1,1 @@
-# tv_algos
+# Trading algos for various platforms
