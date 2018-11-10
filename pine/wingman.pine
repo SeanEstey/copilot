@@ -1,0 +1,116 @@
+///////////////////////////////////////////////////////////////////////////////
+// Basic scalping script using stochastic rsi and fisher transform signals.
+// Recommended settings:
+//   15m: stoch @ 10 10 2 2, fisher @ 9
+//   240m: stoch @ 8 8 2 2, fisher @ 9
+// TODO:
+//  -Heikin ashi (https://www.tradingview.com/wiki/Non-Standard_Chart_Types_Data)
+//  -Stop losses not being executed
+///////////////////////////////////////////////////////////////////////////////
+
+// Init
+// @version=3
+strategy("Wingman",overlay=false, initial_capital=10000, calc_on_order_fills=true, commission_type=strategy.commission.percent) //commission_value=0.075)
+show_stoch  = input(title="Show Stoch RSI", defval=true)
+show_fisher = input(title="Show Fisher Transform", defval=true)
+m1          = input(title="From Month", defval=1, minval=1, maxval=12)
+d1          = input(title="From Day", defval=1, minval = 1, maxval=31)
+y1          = input(title="From Year", defval=2018, minval=2010)
+m2          = input(title="To Month", defval=1, minval=1, maxval=12)
+d2          = input(title="To Day", defval=1, minval=1, maxval=31)
+y2          = input(title="To Year", defval=9999, minval=2017)
+t_start     = timestamp(y1, m1, d1, 00, 00)
+t_end       = timestamp(y2, m2, d2, 23, 59)
+f_len       = input(title="Fisher Length", defval=9, minval=1)
+f_xtrm      = input(title="Fisher Extreme", defval=1.5, minval=0.5)
+sto_src     = input(close, title="RSI Source")
+rsi_len     = input(title="RSI Length", defval=10, minval=1)
+sto_len     = input(title="Stoch Length", defval=10, minval=1)
+sto_kval    = input(title="Stoch K", defval=2, minval=1)
+sto_dval    = input(title="Stoch D", defval=2, minval=1)
+sto_top     = input(title="Stoch Overbought", defval=80.0, minval=1.0)
+sto_bot     = input(title="Stoch Oversold", defval=20.0, minval=1.0)
+
+// Functions
+window()    => time >= t_start and time <= t_end ? true : false
+
+//----------------------------------------------------------------------------------------
+// Stoch RSI 
+//----------------------------------------------------------------------------------------
+rsi1 = rsi(sto_src, rsi_len)
+k = sma(stoch(rsi1, rsi1, rsi1, sto_len), sto_kval)
+d = sma(k, sto_dval)
+sto_oversd = k <= sto_bot and crossover(k[1], d[1]) and k[2] <= d[2]
+sto_overbt = k >= sto_top and crossunder(k[1], d[1]) and k[2] >= d[2]
+
+//----------------------------------------------------------------------------------------
+// Fisher Transform. Adapted from HPotter (v1.0 01/07/2014)
+//----------------------------------------------------------------------------------------
+f_val1 = na, f_val2 = na, fish = na, f_stepln = na
+f_minl = lowest(hl2,f_len)
+f_maxh = highest(hl2, f_len)
+f_val1 := (0.33 * 2 * ((hl2 - f_minl) / (f_maxh - f_minl) - 0.5)) + 0.67 * nz(f_val1[1])
+f_val2 := iff(f_val1 > .99,  .999, iff(f_val1 < -.99, -.999, f_val1))
+fish := 0.5 * log((1 + f_val2) / (1 - f_val2)) + 0.5 * nz(fish[1])
+// 1 == oversold, -1 == overbought
+if(fish >= f_xtrm)
+    f_stepln := iff(fish < fish[1], -1, nz(f_stepln[1], 0))
+if(fish <= f_xtrm * -1)
+    f_stepln := iff(fish > fish[1], 1, nz(f_stepln[1],0))
+if(fish < f_xtrm*-1 and fish > f_xtrm)
+    f_stepln := 0
+    
+//----------------------------------------------------------------------------------------
+// Stop Loss algo by Finnbo
+//----------------------------------------------------------------------------------------
+offset = input(defval=1, title="Offset %", type=float, minval=0.1, maxval=100, step=0.1)
+sumbars = input(defval=6, title="Use last x bars for calculation", type=integer, minval=1)
+srcts = input(title="Source Trailing Stop calculation", type=source, defval=close)
+srctrigger = input(title="Source trigger", type=source, defval=close)
+tsl = (sum(srcts,sumbars)/sumbars)*(1-(offset/100))
+stop_long = crossunder(srctrigger,tsl)
+stop_short = crossover(srctrigger,tsl)
+
+//----------------------------------------------------------------------------------------
+// Manage Positions
+// Entry signals: 1) stoch cross, 2) stoch extreme, 3) fisher extreme
+// Exit signals: opposite stoch extreme
+//----------------------------------------------------------------------------------------
+go_long = sto_oversd and fish < f_xtrm*-1 and fish[1] < f_xtrm*-1                
+go_short = sto_overbt and fish > f_xtrm and fish[1] > f_xtrm
+strategy.entry("Long", strategy.long, when=window() and go_long)
+strategy.entry("Short", strategy.short, when=window() and go_short)
+strategy.close("Long", when=strategy.position_size > 0 and (k[1] >= sto_top) or stop_long)
+strategy.close("Short", when=strategy.position_size > 0 and (k[1] <= sto_bot) or stop_short)
+
+//----------------------------------------------------------------------------------------
+// Plots / Annotations / Styling
+// Stoch: plot signal lines + color code affected candles
+// Fisher: plot signal EMA's and annotate affected candles with arrows
+//----------------------------------------------------------------------------------------
+barcolor(sto_oversd ? green : sto_overbt ? red : black)
+up_arrows = fish < f_xtrm*-1 and fish[1] >= f_xtrm*-1 ? close : 0
+down_arrows = fish > f_xtrm and fish[1] <= f_xtrm ? close : 0
+plotshape(up_arrows, style=shape.triangleup, color=green, location=location.belowbar, size=size.auto)
+plotshape(down_arrows, style=shape.triangledown, color=red, location=location.abovebar, size=size.auto)
+
+plot(tsl, color=(srctrigger<tsl) ? red : green)
+plotshape(stop_long, text="Long Stop", style=shape.circle, color=orange)
+plotshape(stop_short, text="Short Stop", style=shape.circle, color=purple)
+
+// ***** Uncomment to plot *****
+// plot(strategy.position_size)
+
+// ***** Uncomment to plot Stoch RSI ******
+// plot(k, color=blue)
+// plot(d, color=orange)
+// h0 = hline(sto_top, "Stoch Overbought", black)
+// h1 = hline(sto_bot, "Stoch Oversold", black)
+// fill(h0, h1, color=purple, transp=80)
+
+// ***** Uncomment to plot Fisher Transform ******
+// plot(fish, color=blue, title="Fisher", linewidth=2)
+// plot(nz(fish[1]), color=red, title="Trigger", linewidth=2)                
+// plot(f_xtrm*-1, color=black, style=circles, title="bottom")
+// plot(f_xtrm, color=black, style=circles, title="top")
+// plot(f_stepln, color=blue, title="Fisher Stepline", linewidth=2, style=stepline)
