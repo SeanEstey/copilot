@@ -38,11 +38,12 @@ macd_histo_width = input(title="MACD Histogram Thickness", defval=5)            
 factor      = input(1, minval=1,maxval = 1000, title="Trend Transition Signal")     // Signal 2
 pd          = input(1, minval=1,maxval = 1000, title="Period")                      // Signal 2
 hma_src     = input(close, title="Hull MA's Source:")                               // Hull MA
-hma_slow_base_length = input(8, minval=1, title="HMA Slow Base Length:")            // Hull MA
-hma_slow_length_scalar = input(5, minval=0, title="HMA Slow Length Scalar:")        // Hull MA
-hma_fast_base_length = input(8, minval=1, title="HMA Fast Base Length:")            // Hull MA
+hma_slow_base_length = input(50, minval=1, title="HMA Slow Base Length:")            // Hull MA
+hma_slow_length_scalar = input(1, minval=0, title="HMA Slow Length Scalar:")        // Hull MA
+hma_fast_base_length = input(25, minval=1, title="HMA Fast Base Length:")            // Hull MA
 hma_fast_length_scalar = input(1, minval=0, title="HMA Fast Length Scalar:")        // Hull MA
-sl_pct      = input(title="Stop Loss Percent", defval=1.0, type=float)
+sl_pct      = input(title="Stop Loss Percent", defval=3.0, type=float)
+open_long=na, open_short=na, close_long=na, close_short=na, position=na, final_pos=na, flat=na, entry_price=na, stop=na
 
 // Functions
 window()    => time >= t_start and time <= t_end ? true : false
@@ -74,37 +75,33 @@ trend_down := close[1] < trend_down[1] ? min(down, trend_down[1]) : down        
 // trend_rev_down = trend == -1 and trend[1] == 1 ? -1 : na                         // Trend
 trend := close > trend_down[1] ? 1 : close < trend_up[1] ? -1: nz(trend[1],0)       // Trend
 
+
 hma_slow = hullma(hma_src, hma_slow_base_length + hma_slow_length_scalar * 6)       // Hull MA
 hma_fast = hullma(hma_src, hma_fast_base_length + hma_fast_length_scalar * 6)       // Hull MA
+hull_cross = 0
+hull_cross := crossover(hma_fast, hma_slow) ? 1 : crossunder(hma_fast, hma_slow) ? -1 : hull_cross[1]
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
 // Position Management
 // Manually tracks long/short positions and stop losses (both unavailable in indicators)
+// Strategy: only trade in direction of trend
+// Setup #1: HMA cross + 3 brick trend
+// Setup #2: HMA cross + 1 brick trend following 2+ brick pullback
 //---------------------------------------------------------------------------------------------------------------------------------------------------
-open_long=na, open_short=na, close_long=na, close_short=na, position=na, final_pos=na, flat=na, entry_price=na, stop=na
-open_long := crossover(hma_fast, hma_slow) and macd_pos_up
-close_long := low<=hma_slow or hma_fast[1]>=hma_fast
-open_short := crossunder(hma_fast, hma_slow) and macd_neg_down
-close_short := high>=hma_slow or hma_fast[1]<=hma_fast
+open_long := (hull_cross==1 and close > open) or (hull_cross==1 and close > open and barssince(close[1] > open[1]) >= 2)
+close_long := barssince(close > open) >= 3
+open_short := (hull_cross==-1 and open > close) or (hull_cross==-1 and open > close and barssince(open[1]  > close[1]) >= 2)
+close_short := barssince(close < open) >= 3
 
 position := open_long ? 1 : open_short ? -1 : (position[1]==1 and close_long) or (position[1]==-1 and close_short) ? 0 : position[1]
 entry_price := position==1 and position[1]!=1 ? low : position==-1 and position[1]!=-1 ? high : entry_price[1]
 stop := position[1]==1 and ((low - entry_price)/entry_price)*100 <= sl_pct*-1 ? true : position[1]==-1 and ((high - entry_price)/entry_price)*100 >= sl_pct ? true : false
 final_pos := open_long ? 1 : open_short ? -1 : (position[1]==1 and close_long or stop) or (position[1]==-1 and close_short or stop) ? 0 : final_pos[1]
 
-go_long_sig = open_long and window()
+go_long_sig = final_pos==1 and final_pos[1]!=1 and window()
 cl_long_sig = final_pos[1]==1 and final_pos==0 and window()
-go_short_sig = open_short and window()
+go_short_sig = final_pos==-1 and final_pos[1]!=-1 and window()
 cl_short_sig = final_pos[1]==-1 and final_pos==0 and window()
-
-//---------------------------------------------------------------------------------------------------------------------------------------------------
-// Tradingview Strategy Backtesting
-// Important: Comment these lines when running an indicator script.
-//---------------------------------------------------------------------------------------------------------------------------------------------------
-strategy.close("LONG", when = cl_long_sig  and strategy.position_size > 0)
-strategy.close("SHORT", when = cl_short_sig and strategy.position_size < 0)
-strategy.entry("LONG", strategy.long,  when = go_long_sig and strategy.position_size <= 0)
-strategy.entry("SHORT", strategy.short, when = go_short_sig and strategy.position_size >= 0)
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
 // Autoview Alerts
@@ -131,16 +128,19 @@ alertcondition(cl_short_sig, title='Short Exit', message='e=bitmex-testnet a=tes
 // Upblock: #b6d7a8, border: #6aa84f, Downblock: #ea9999f7, border: #e06666
 //---------------------------------------------------------------------------------------------------------------------------------------------------
 
-rt2 = plot(rstt, color = rstt != rstt[1] ? na : red, title="RT2", linewidth=1, offset=+0, editable=true)                                // S/R
-rb2 = plot(rstb, color = rstb != rstb[1] ? na : green, title="RB2", linewidth=1, offset=0, editable=true)                               // S/R
-ul2 = plot(renko_top, "Renko Channel Top", color=#e06666, linewidth=1, style=circles, transp=25)                                        // S/R
-ll2 = plot(renko_bot, "Renko Channel Bot", color=#6aa84f, linewidth=1, style=circles, transp=25)                                        // S/R
-fill(ul2, ll2, black, 95, "Renko Channel")                                                                                              // S/R
-fill(ul2, rt2, red, 93, "Resistance Channel")                                                                                           // S/R
-fill(ll2, rb2, green, 93, "Support Channel")                                                                                            // S/R
+//rt2 = plot(rstt, color = rstt != rstt[1] ? na : red, title="RT2", linewidth=1, offset=+0, editable=true)                                // S/R
+//rb2 = plot(rstb, color = rstb != rstb[1] ? na : green, title="RB2", linewidth=1, offset=0, editable=true)                               // S/R
+//ul2 = plot(renko_top, "Renko Channel Top", color=#e06666, linewidth=1, style=circles, transp=25)                                        // S/R
+//ll2 = plot(renko_bot, "Renko Channel Bot", color=#6aa84f, linewidth=1, style=circles, transp=25)                                        // S/R
+//fill(ul2, ll2, black, 95, "Renko Channel")                                                                                              // S/R
+//fill(ul2, rt2, red, 93, "Resistance Channel")                                                                                           // S/R
+//fill(ll2, rb2, green, 93, "Support Channel")                                                                                            // S/R
 
 plot(hma_slow, "HMA Slow", color=orange, linewidth=2, transp=0)                                                                         // Hull MA
 plot(hma_fast, "HMA Fast", color=teal, linewidth=2, transp=0)                                                                           // Hull MA
+
+//plot(hull_cross, "Hull Cross", color=white, linewidth=2)
+//plot(trend, "Trend", color=white, linewidth=2)
 
 // plot(macd_pos_up, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0)                                             // MACD
 // plot(macd_pos_down, linewidth=macd_histo_width, color=teal, style=histogram, histbase=0.0, transp=85)                                // MACD
@@ -152,9 +152,10 @@ plot(hma_fast, "HMA Fast", color=teal, linewidth=2, transp=0)                   
 // plotshape(trend_rev_up, "New Uptrend", shape.labelup, location.belowbar, fuchsia, 0, 0, size=size.tiny)                              // Trend
 // plotshape(trend_rev_down, "New Downtrend", shape.labeldown, location.abovebar, fuchsia, 0, 0, size=size.tiny)                        // Trend
 
-plotshape(go_long_sig, "Long Entry", shape.triangleup, location.belowbar, green, 0, 0, size=size.tiny, text="Long")                     // Positions
-plotshape(cl_long_sig, "Long Exit", shape.triangleup, location.belowbar, green, 0, 0, size=size.tiny, text="Exit\nLong")                // Positions
-plotshape(go_short_sig, "Short Entry", shape.triangledown, location.abovebar, red, 0, 0, size=size.tiny, text="Short")                  // Positions
-plotshape(cl_short_sig, "Short Exit", shape.triangledown, location.abovebar, red, 0, 0, size=size.tiny, text="Exit\nShort")             // Positions
-// plot(position, title="Position", color=black, transp=0)     
+plotshape(go_long_sig, "Long Entry", shape.triangleup, location.belowbar, green, 0, 0, size=size.small, transp=0)//, text="Long")                     // Positions
+plotshape(cl_long_sig, "Long Exit", shape.triangledown, location.abovebar, green, 0, 0, size=size.small, transp=0)//, text="Long")                // Positions
+plotshape(go_short_sig, "Short Entry", shape.triangledown, location.abovebar, red, 0, 0, size=size.small, transp=0)//, text="Short")                  // Positions
+plotshape(cl_short_sig, "Short Exit", shape.triangleup, location.belowbar, red, 0, 0, size=size.small, transp=0)//, text="Short")             // Positions
+
+//plot(final_pos, title="Position", color=white, linewidth=2, transp=0)     
 //plot(stop ? 1 : 0, title="Stop Loss", color=black, transp=0) 
