@@ -1,0 +1,104 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Autoview scalping script based on Vdub Renko SniperVX1.
+// Instructions:
+//  1) Setup Autoview
+//  2) Switch to 1m TF w/ Renko candles (requires Pro paid acct). Set Box Size to Traditional (not ATR) and manually test optimal value.
+//  3) Add each of 4 alerts: Open Long, Close Long, Open Short, Close Short
+// Suggestions: 
+//      PAIR    BOX SIZE    TF
+//      EURCAD  ???         1m
+//      BTCUSD  50-100      1m
+//      ETHUSD  0.33-2.0     1m
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//@version=3
+
+// ***** TOGGLE LINE COMMENTS BELOW FOR INDICATOR VS STRATEGY USAGE *****
+//study(title="Renkonator 5000 [IND]", overlay=true)
+strategy(title="Renkonator 5000 [STRAT]", overlay=true, commission_type=strategy.commission.percent, commission_value=0.075, calc_on_order_fills=true, calc_on_every_tick=true, pyramiding=0, initial_capital=10000) //default_qty_value=10000)
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Init
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+m1          = input(title="From Month", defval=6, minval=1, maxval=12)              // Strat Backtest
+d1          = input(title="From Day", defval=1, minval = 1, maxval=31)              // Strat Backtest
+y1          = input(title="From Year", defval=2018, minval=2013)                    // Strat Backtest
+m2          = input(title="To Month", defval=1, minval=1, maxval=12)                // Strat Backtest
+d2          = input(title="To Day", defval=1, minval=1, maxval=31)                  // Strat Backtest
+y2          = input(title="To Year", defval=9999, minval=2017)                      // Strat Backtest
+t_start     = timestamp(y1, m1, d1, 00, 00)                                         // Strat Backtest
+t_end       = timestamp(y2, m2, d2, 23, 59)                                         // Strat Backtest
+factor      = input(1, minval=1,maxval = 1000, title="Trend Transition Signal")     // Trend
+pd          = input(1, minval=1,maxval = 1000, title="Period")                      // Trend
+sl_pct      = input(title="Stop Loss Percent", defval=3.0, type=float)
+
+// Functions
+window()    => time >= t_start and time <= t_end ? true : false
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Signal Generation
+// Rajandran Supertrend (1==up, -1==down)
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+up = hl2 - (factor * atr(pd))                                                       // Trend
+down = hl2 + (factor * atr(pd))                                                     // Trend
+trend_up = na, trend_down = na, trend = na                                          // Trend
+trend_up := close[1] > trend_up[1] ? max(up, trend_up[1]) : up                      // Trend
+trend_down := close[1] < trend_down[1] ? min(down, trend_down[1]) : down            // Trend
+trend := close > trend_down[1] ? 1 : close < trend_up[1] ? -1: nz(trend[1],0)       // Trend
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Position Management
+// Manually tracks long/short positions and stop losses (both unavailable in indicators)
+// Strategy: only trade in direction of trend
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+long_signal = trend==1 and trend[1]==-1
+short_signal = trend==-1 and trend[1]==1
+
+close_long = short_signal and strategy.position_size > 0 and window()
+close_short = long_signal and strategy.position_size < 0 and window()
+open_long = long_signal and strategy.position_size <= 0 and window()
+open_short = short_signal and strategy.position_size >= 0 and window()
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+// Tradingview Strategy Backtesting
+// Important: Comment these lines when running an indicator script.
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+//strategy.close("LONG", when=close_long)
+//strategy.close("SHORT", when=close_short)
+strategy.entry("LONG", strategy.long,  when=open_long)
+strategy.entry("SHORT", strategy.short, when=open_short)
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Autoview Alerts
+// IMPORTANT: Check alert expiration time regularly to monitor expiry dates.
+// CMD      DESC        VALUES
+// e        exchange    bitmex, okcoin, ...
+// a        acct        name created for linked Autoview exchange
+// s        symbol      xbtusd, ...
+// b        book        long, short
+// c        close       order, position
+// t        type        market, limit, ...
+// q        quantity    order size
+// l        leverage    1-50
+// Close all longs = e=okcoin s=butcusd3m c=position b=long
+// Close all shorts = e=okcoin s=butcusd3m c=position b=short
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+alertcondition(open_long, title='Long Entry', message='e=bitmex-testnet a=testmex s=ethusd b=long t=market l=10 q=1000')
+alertcondition(close_long, title='Long Exit', message='e=bitmex-testnet a=testmex s=ethusd c=position t=market')
+alertcondition(open_short, title='Short Entry', message='e=bitmex-testnet a=testmex s=ethusd b=short t=market l=10 q=1000')
+alertcondition(close_short, title='Short Exit', message='e=bitmex-testnet a=testmex s=ethusd c=position t=market')
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+// Plots & Styling
+// Upblock: #b6d7a8, border: #6aa84f, Downblock: #ea9999f7, border: #e06666
+//---------------------------------------------------------------------------------------------------------------------------------------------------
+
+// plot(trend, "Trend", color=black, linewidth=2, transp=0) 
+// plot(trend_up, "Trend Up", color=green, linewidth=2, transp=0)
+// plot(trend_down, "Trend Down", color=red, linewidth=2, transp=0)
+
+// ***** UNCOMMENT TO USE AS INDICATOR *****
+// plotshape(open_long, "Long Entry", shape.triangleup, location.belowbar, green, 0, 0, size=size.small, transp=0)//, text="Long")       // Positions
+// plotshape(close_long, "Long Exit", shape.triangledown, location.abovebar, green, 0, 0, size=size.small, transp=0)//, text="Long")      // Positions
+// plotshape(open_short, "Short Entry", shape.triangledown, location.abovebar, red, 0, 0, size=size.small, transp=0)//, text="Short")    // Positions
+// plotshape(close_short, "Short Exit", shape.triangleup, location.belowbar, red, 0, 0, size=size.small, transp=0)//, text="Short")       // Positions
