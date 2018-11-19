@@ -12,19 +12,17 @@
 #define MAGICMA  20131111
 
 //--- Inputs
-input double Lots             = 0.1;
-input double MaximumRisk      = 0.02;
-input double DecreaseFactor   = 3;
-input int    MovingPeriod     = 12;
-input int    MovingShift      = 6;
-input int    FisherPeriod     = 9; // min:11
-input double FisherRange      = 1.5; // min:0.5
-input int    RSIPeriod        = 10; // min:1
-input int    StochPeriod      = 10; // min:1
-input int    StochK           = 2; // min:1
-input int    StochD           = 2; // min:1
-input int    StochOverbought  = 90; // min:1
-input int    StochOversold    = 10; // min:1
+input double Lots             = 1.0;
+input int    FisherPeriod     = 9;        // minimum 11
+input double FisherRange      = 1.5;      // minimum 0.5
+input int    RSIPeriod        = 10;       // minimum 1
+input int    StochPeriod      = 10;       // minimum 1
+input int    StochK           = 2;        // minimum 1
+input int    StochD           = 2;        // minimum 1
+input int    StochOverbought  = 90;       // minimum 1
+input int    StochOversold    = 10;       // minimum 1
+input int    TakeProfit       = 25;       // pips
+input int    StopLoss         = 5;       // pips
 
 
 //+---------------------------------------------------------------------------+
@@ -40,16 +38,18 @@ int OnInit() {
 //+---------------------------------------------------------------------------+
 void OnDeinit(const int reason) {}
   
+  
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 void OnTick() {
+   //Print("OrdersTotal=",OrdersTotal());
+   
    if(Bars<100 || IsTradeAllowed()==false || !NewBar()) {
       //Print("Could not trade!");
       return;
    }
-   // What does this do?!?!?!
-   if(Volume[0]>1)
+   if(Volume[0]>1)     // What does this do?!?!?!
       return;
       
    int signal = GenerateSignal();
@@ -58,8 +58,10 @@ void OnTick() {
       //Print("No trade signal.");
       return;
    }
-      
-   //Print("OrdersTotal=",OrdersTotal());
+       
+   /*** Iterate through open positions, close as necessary ***/
+   
+   int result=NULL;
    
    for(int i=0; i<OrdersTotal(); i++) {
       bool is_selected = OrderSelect(i, SELECT_BY_POS, MODE_TRADES);    // Load current order
@@ -68,35 +70,49 @@ void OnTick() {
          Print("Could not retrieve order. Error: ", GetLastError());
          continue;
       }     
-      
       if(OrderSymbol()!=Symbol() || OrderMagicNumber()!=MAGICMA) {
          Print("ERROR: wrong symbol/magic_num. Symbol=", Symbol(), ", MagicNum=", OrderMagicNumber());
          continue;
       }
       
-      // BUY signal. Close short positions. Open long position.
-      if(signal == 1 && OrderType() == OP_SELL) {
-         Print("Closing short positions");   
-         int res = OrderClose(OrderTicket(), OrderLots(), Ask, 3, White);
-         Print("Result:", res);      
-      }
+      if(signal == 1 && OrderType() == OP_SELL)
+         result = OrderClose(OrderTicket(), OrderLots(), Ask, 3, White);
       // SELL signal. Close long positions. Open short position.
-      else if(signal == -1 && OrderType() == OP_BUY) {
-         Print("Closing long positions");
-         int res = OrderClose(OrderTicket(), OrderLots(), Bid, 3, White);
-         Print("Result:", res);
-      } 
+      else if(signal == -1 && OrderType() == OP_BUY)
+         result = OrderClose(OrderTicket(), OrderLots(), Bid, 3, White);
+      
+      if(result != 1) {
+         Alert("ERROR closing Order ", OrderTicket());
+      }
+      else
+         Alert("Closed Order ", OrderTicket());
    }
    
-   // Open long position.
-   if(signal == 1) {
-      int res = OrderSend(Symbol(), OP_BUY, LotsOptimized(), Ask, 3, 0, 0, "", MAGICMA, 0, Red);
-      Print("LONG order value: ", res);
+   /*** Open Positions ***/
+   // Calculate stops/profit levels (in pips), submit orders
+   result=NULL;
+   double TP=0.0, SL=0.0,  price=0.0;
+   
+   if(signal == 1) {      // Long
+      price = Bid;
+      TP = Bid + TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
+      SL = Bid - StopLoss*Point*10;
+      result = OrderSend(Symbol(), OP_BUY, LotsOptimized(), Ask, 3, SL, TP, "", MAGICMA, 0, Blue);
    }
-   // Open short position.
-   else if(signal == -1) {
-      int res = OrderSend(Symbol(), OP_SELL, LotsOptimized(), Bid, 3, 0, 0, "", MAGICMA, 0, Blue);
-      Print("SHORT order value: ", res);
+   else if(signal == -1) { // Short
+      price = Ask;
+      TP = Ask - TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
+      SL = Ask + StopLoss*Point*10;
+      result = OrderSend(Symbol(), OP_SELL, LotsOptimized(), Bid, 3, SL, TP, "", MAGICMA, 0, Red);
+   }
+   
+   if(result == -1) { 
+      double minstoplevel=MarketInfo(Symbol(), MODE_STOPLEVEL);
+      Alert("ERROR: SendOrder code ", GetLastError());
+      Alert(Symbol(), "minStopLevel=", minstoplevel, " TP=",TP, ", SL=", SL);
+   }
+   else {
+      Print("OrderID:", result, " P:", price, " TP:", TP, " SL:", SL);
    }
    
    return;
@@ -116,7 +132,7 @@ int GenerateSignal() {
    //Print("StochRSI: " + (string)stochrsi + ", Signal: " + (string)signal);
    
    if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0) {
-      Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
+      //Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
       return 0;
    }
    
