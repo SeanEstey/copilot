@@ -5,6 +5,10 @@
 //   240m: stoch @ 8 8 2 2, fisher @ 9
 ///////////////////////////////////////////////////////////////////////////////
 
+/*
+https://book.mql4.com/functions/terminal
+*/
+
 #property copyright ""
 #property link      ""
 #property version   "1.00"
@@ -13,10 +17,10 @@
 
 //--- Inputs
 input double Lots             = 1.0;
-input int    TakeProfit       = 25;       // pips
+input int    TakeProfit       = 5;       // pips
 input int    StopLoss         = 5;       // pips
 
-input int    FisherPeriod     = 9;        // minimum 11
+input int    FisherPeriod     = 10;        // minimum 11
 input double FisherRange      = 1.5;      // minimum 0.5
 input int    RSIPeriod        = 10;       // minimum 1
 input int    StochPeriod      = 10;       // minimum 1
@@ -136,7 +140,7 @@ int GenerateSignal() {
    double fish1 =  iCustom(NULL,0,"FisherTransform",0, 0);    // Main buffer: 0
    double fish2 =  iCustom(NULL,0,"FisherTransform",1, 0);    // Signal buffer: 1
    
-   //Print("StochRSI: " + (string)stochrsi + ", Signal: " + (string)signal);
+   //Print("StochRSI: ", stochrsi, ", Signal: ", signal, ", Fisher: ", fish1);
    
    if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0) {
       //Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
@@ -144,20 +148,20 @@ int GenerateSignal() {
    }
    
    if(stochrsi>=StochOverbought && stochrsi < signal) {
-      if(fish1 >= FisherRange && fish2 >= FisherRange) {
+      if(fish1 >= FisherRange) { //&& fish2 >= FisherRange) {
          Print("Sell signal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher1=", fish1, ", Fisher2=", fish2);
          return -1;
       }
    }
    
    if(stochrsi <= StochOversold && stochrsi > signal) {
-      if(fish1 <= FisherRange*-1 && fish2 <= FisherRange*-1) {
+      if(fish1 <= FisherRange*-1) { //&& fish2 <= FisherRange*-1) {
          Print("Buy sginal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher=", fish1);
          return 1;
       }
    }
    
-   //Print("No Buy/Sell signal");
+   Print("Stoch: ", stochrsi, ", Fisher: ", fish1);
    return 0;
 }
 
