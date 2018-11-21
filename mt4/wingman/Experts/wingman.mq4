@@ -1,56 +1,60 @@
-///////////////////////////////////////////////////////////////////////////////
-// Basic scalping script using stochastic rsi and fisher transform signals.
-// Recommended settings:
-//   15m: stoch @ 10 10 2 2, fisher @ 9
-//   240m: stoch @ 8 8 2 2, fisher @ 9
-///////////////////////////////////////////////////////////////////////////////
-
-/*
-https://book.mql4.com/functions/terminal
-*/
-
-#property copyright ""
-#property link      ""
+//+------------------------------------------------------------------+
+//|                                                      wingman.mq4 |
+//|                                 Copyright 2018, Wing Enterprises |
+//|                                         https://www.wingcorp.com |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2018, Wing Enterprises"
+#property link      "https://www.wingcorp.com"
 #property version   "1.00"
 #property strict
+
 #define MAGICMA  20131111
+#define DEBUG false
 
 //--- Inputs
 input double Lots             = 1.0;
-input int    TakeProfit       = 5;       // pips
-input int    StopLoss         = 5;       // pips
-
-input int    FisherPeriod     = 10;        // minimum 11
-input double FisherRange      = 1.5;      // minimum 0.5
-input int    RSIPeriod        = 10;       // minimum 1
-input int    StochPeriod      = 10;       // minimum 1
-input int    StochK           = 2;        // minimum 1
-input int    StochD           = 2;        // minimum 1
-input int    StochOverbought  = 90;       // minimum 1
-input int    StochOversold    = 10;       // minimum 1
+input int    TakeProfit       = 15;    
+input int    StopLoss         = 5;
+input int    RSIPeriod        = 10;
+input int    KPeriod          = 10;
+input int    DPeriod          = 2;
+input int    Slowing          = 2;
+input int    StochOverbought  = 90;
+input int    StochOversold    = 10;
+input int    FisherPeriod     = 9;
+input double FisherRange      = 1.25;
 
 
 double GetLots() {return Lots;}
 int CalculateCurrentOrders(string symbol) {return 1;}
 
+
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 int OnInit() {
-   OnStart();
+   string text = "Wingman!";
+   ObjectCreate(0,"label",OBJ_LABEL,0,0,0);
+   ObjectSetString(0,"label",OBJPROP_TEXT,text);
+   ObjectSetInteger(0,"label",OBJPROP_XDISTANCE,5);
+   ObjectSetInteger(0,"label",OBJPROP_YDISTANCE,20);
+   ObjectSetInteger(0,"label",OBJPROP_COLOR,clrForestGreen);
    return(INIT_SUCCEEDED);
 }
 
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
-void OnDeinit(const int reason) {}
-  
+void OnDeinit(const int reason) {
+//---
+   ObjectDelete("label");
+}
   
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 void OnTick() {   
+//---
    if(Bars<100 || IsTradeAllowed()==false || !NewBar()) {
       //Print("Could not trade!");
       return;
@@ -126,50 +130,52 @@ void OnTick() {
    return;
 }
 
-//+----------------------------------------------------------------------------
-//***************************** SIGNAL ALGOS *********************************/
-//+----------------------------------------------------------------------------
+//+----------------------------------------------------------------------------+
+//|**************************** SIGNAL ALGOS *********************************/
+//+----------------------------------------------------------------------------+
 
-//+-----------------------------------------------------------------------------
-// Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
-//+-----------------------------------------------------------------------------
+//+----------------------------------------------------------------------------+
+//| Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
+//+----------------------------------------------------------------------------+
 int GenerateSignal() {
-   double stochrsi = iCustom(NULL,0,"StochRSI",0,0);    // Main buffer: 0
-   double signal = iCustom(NULL,0,"StochRSI",1,0);       // Signal buffer: 1
-   
-   double fish1 =  iCustom(NULL,0,"FisherTransform",0, 0);    // Main buffer: 0
-   double fish2 =  iCustom(NULL,0,"FisherTransform",1, 0);    // Signal buffer: 1
-   
-   //Print("StochRSI: ", stochrsi, ", Signal: ", signal, ", Fisher: ", fish1);
+   double stochrsi = iCustom(NULL,0,"StochRSI", RSIPeriod, KPeriod, DPeriod, Slowing, 0, 0);    // Main buffer: 0
+   double signal = iCustom(NULL,0,"StochRSI", RSIPeriod, KPeriod, DPeriod, Slowing, 1, 0);       // Signal buffer: 1
+   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 0, 0);    // Main buffer: 0
+   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 1, 0);    // Signal buffer: 1
    
    if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0) {
-      //Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
+      if(DEBUG==true)
+         Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
       return 0;
    }
    
    if(stochrsi>=StochOverbought && stochrsi < signal) {
       if(fish1 >= FisherRange) { //&& fish2 >= FisherRange) {
-         Print("Sell signal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher1=", fish1, ", Fisher2=", fish2);
+         if(DEBUG==true)
+            Print("Sell signal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher1=", fish1, ", Fisher2=", fish2);
          return -1;
       }
    }
-   
    if(stochrsi <= StochOversold && stochrsi > signal) {
       if(fish1 <= FisherRange*-1) { //&& fish2 <= FisherRange*-1) {
-         Print("Buy sginal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher=", fish1);
+         if(DEBUG==true)
+            Print("Buy sginal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher=", fish1);
          return 1;
       }
    }
    
-   Print("Stoch: ", stochrsi, ", Fisher: ", fish1);
+   if(DEBUG==true)
+      Print("StochRSI: ", stochrsi, ", Signal: ", signal, ", Fisher: ", fish1);
    return 0;
 }
 
 
-//+-----------------------------------------------------------------------------
+//+-----------------------------------------------------------------------------+
 //| 
-//+-----------------------------------------------------------------------------
-int HullMA(int n) {
+//+-----------------------------------------------------------------------------+
+int HullMA(int length) {
+   //hullma(Close, length)=>
+   // iMA(2*wma(src, length/2) - WEIGHTED_MA(src, length), round(sqrt(length)))
    // double n2ma = 2 * iMA(NULL,0,n,0
    //n2ma=2*wma(close,round(n/2))
    //nma=wma(close,n)
@@ -179,19 +185,13 @@ int HullMA(int n) {
 }
 
 
+//+----------------------------------------------------------------------------+
+//|**************************** UTILITY METHODS ******************************/
+//+----------------------------------------------------------------------------+
 
-//+----------------------------------------------------------------------------
-//***************************** UTILITY METHODS ******************************/
-//+----------------------------------------------------------------------------
-
-
-//+-----------------------------------------------------------------------------
-//| 
-//+-----------------------------------------------------------------------------
 bool NewBar() {
     static datetime lastbar;
-    datetime curbar = Time[0];
-    
+    datetime curbar = Time[0];  
     if(lastbar != curbar) {
        lastbar=curbar;
        return true;
@@ -200,31 +200,3 @@ bool NewBar() {
       return false;
 }
 
-
-//+-----------------------------------------------------------------------------
-//| 
-//+-----------------------------------------------------------------------------
-void OnStart() {
-   Print("Wingman Robot Init");
-   Print("Bars=" + (string)Bars);
-   Print("Symbol name of the current chart=",_Symbol); 
-   Print("Timeframe of the current chart=",_Period); 
-   Print("Acct Balance: ", AccountBalance());
-   Print("The latest known seller's price (ask price) for the current symbol=",Ask); 
-   Print("The latest known buyer's price (bid price) of the current symbol=",Bid);    
-   Print("Number of decimal places=",Digits); 
-   Print("Number of decimal places=",_Digits); 
-   Print("Size of the current symbol point in the quote currency=",_Point); 
-   Print("Size of the current symbol point in the quote currency=",Point);    
-   Print("Number of bars in the current chart=",Bars); 
-   Print("Open price of the current bar of the current chart=",Open[0]); 
-   Print("Close price of the current bar of the current chart=",Close[0]); 
-   Print("High price of the current bar of the current chart=",High[0]); 
-   Print("Low price of the current bar of the current chart=",Low[0]); 
-   Print("Time of the current bar of the current chart=",Time[0]); 
-   Print("Tick volume of the current bar of the current chart=",Volume[0]); 
-   Print("Last error code=",_LastError); 
-   Print("Random seed=",_RandomSeed); 
-   Print("Stop flag=",_StopFlag); 
-   Print("Uninitialization reason code=",_UninitReason);
-}
