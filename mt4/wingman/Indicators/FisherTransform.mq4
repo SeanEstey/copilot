@@ -13,7 +13,7 @@
 #property indicator_color2 Red
 
 //---- input parameters
-extern int FisherPeriod   = 10;
+extern int FisherPeriod   = 9;
 
 //---- indicator buffers
 double FishBuffer1[];
@@ -26,7 +26,6 @@ int deinit() {
    return(0);
 }
 
-
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 int init()  {
@@ -38,15 +37,13 @@ int init()  {
    SetIndexBuffer(0, FishBuffer1);
    SetIndexStyle(1,DRAW_LINE,STYLE_SOLID,2);
    SetIndexBuffer(1, FishBuffer2);
- 
-   //ArrayResize(FishBuffer1, 300); 
+  
    ArrayInitialize(FishBuffer1, 0);
-   //ArrayResize(FishBuffer2, 300); 
    ArrayInitialize(FishBuffer2, 0);
 
    short_name="Fisher Transform";
    IndicatorShortName(short_name);
-   //IndicatorDigits(3);
+   IndicatorDigits(3);
    
    SetIndexLabel(0, "Fish1");
    SetIndexLabel(1, "Fish2");
@@ -58,10 +55,10 @@ int init()  {
 }
 
 //+------------------------------------------------------------------+
+// The amount of bars not changed after the indicator had been launched last. 
+//+------------------------------------------------------------------+
 int start() {
-   // The amount of bars not changed after the indicator had been launched last. 
    int counted_bars = IndicatorCounted();
-  
    if(counted_bars == 0) {
       for(int j=1; j<=FisherPeriod; j++) {
          FishBuffer1[Bars-j] = 0;
@@ -70,7 +67,6 @@ int start() {
    }
    
    int i = Bars - FisherPeriod;
-   
    if(counted_bars > FisherPeriod)
       i=Bars-counted_bars-1;
    
@@ -87,10 +83,15 @@ int start() {
       i--;
    }
    
-   //Print("start(): counted_bars=", counted_bars, ", i=", i, ", Bars=", Bars);
-   for(int k=0; k<ArraySize(FishBuffer1); k++) {
-   //   Print("FishBuffer1[", k, "]=", FishBuffer1[k]);
-   }
-   
    return(0);   
+}
+
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+void dump() {
+   //Print("start(): counted_bars=", counted_bars, ", i=", i, ", Bars=", Bars);
+   
+   for(int k=0; k<ArraySize(FishBuffer1); k++) {
+      Print("FishBuffer1[", k, "]=", FishBuffer1[k]);
+   }
 }
