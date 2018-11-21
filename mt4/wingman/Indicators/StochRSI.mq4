@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                            Basic    StochRSI.mq4 |
 //|                                 Copyright � 2007, Petr Doroshenko|
 //|                                            i7hornet@yahoo.com    |
@@ -21,12 +21,13 @@
 #property indicator_buffers 2
 #property indicator_color1 Blue
 #property indicator_color2 Red
+
 //---- input parameters
-extern int RPrice=5; //PRICE_TYPICAL 
-extern int RPeriod=10;
+extern int RSIPeriod=10;
 extern int KPeriod=10;
 extern int DPeriod=2;
 extern int Slowing=2;
+
 //---- buffers
 double MainBuffer[];
 double SignalBuffer[];
@@ -36,6 +37,7 @@ double rsi[];
 
 int draw_begin1=0;
 int draw_begin2=0;
+int RPrice=5;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -56,7 +58,7 @@ int init() {
    SetIndexBuffer(1, SignalBuffer);
    
    //---- name for DataWindow and indicator subwindow label
-   short_name="StochRSI("+RPeriod+","+KPeriod+","+DPeriod+","+Slowing+")";
+   short_name="StochRSI("+RSIPeriod+","+KPeriod+","+DPeriod+","+Slowing+")";
    IndicatorShortName(short_name);
    SetIndexLabel(0,short_name);
    SetIndexLabel(1,"Signal");
@@ -89,13 +91,13 @@ int start() {
    }
    
    //---- initial RSI      
-   i=Bars-RPeriod;
+   i=Bars-RSIPeriod;
    
-   if(counted_bars>RPeriod)
+   if(counted_bars>RSIPeriod)
       i=Bars-counted_bars-1;
    
    while(i>=0){
-      rsi[i]=iRSI(NULL,0,RPeriod,RPrice,i); i--;
+      rsi[i]=iRSI(NULL,0,RSIPeriod,RPrice,i); i--;
    }
    
    //---- minimums & maximums counting
