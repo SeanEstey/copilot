@@ -9,9 +9,9 @@
 #property strict
 
 #define MAGICMA  20131111
-#define DEBUG false
 
-//--- Inputs
+//--- Inputsu
+input bool   DEBUG            = false;
 input double Lots             = 1.0;
 input int    TakeProfit       = 15;    
 input int    StopLoss         = 5;
@@ -131,41 +131,59 @@ void OnTick() {
 }
 
 //+----------------------------------------------------------------------------+
-//|**************************** SIGNAL ALGOS *********************************/
+//|**************************** SIGNAL ALGOS **********************************|
 //+----------------------------------------------------------------------------+
 
 //+----------------------------------------------------------------------------+
+//| Look for confluence between Stochastic RSI oversold/overbought conditions
+//| and Fisher Transform in extreme range.
 //| Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
 //+----------------------------------------------------------------------------+
 int GenerateSignal() {
-   double stochrsi = iCustom(NULL,0,"StochRSI", RSIPeriod, KPeriod, DPeriod, Slowing, 0, 0);    // Main buffer: 0
-   double signal = iCustom(NULL,0,"StochRSI", RSIPeriod, KPeriod, DPeriod, Slowing, 1, 0);       // Signal buffer: 1
-   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 0, 0);    // Main buffer: 0
-   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 1, 0);    // Signal buffer: 1
+   string msg="";
+   double stochrsi = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,0,0);
+   double signal = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,1,0);
+   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 0, 0);
+   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 1, 0);
    
-   if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0) {
-      if(DEBUG==true)
-         Print("Error: StochRSI Out of Bounds. Value="+(string)stochrsi+", Signal="+(string)signal);
+   bool stoch_ob = stochrsi>=StochOverbought && stochrsi < signal ? true : false;
+   bool stoch_os = stochrsi <= StochOversold && stochrsi > signal ? true : false;
+   bool fish_ob = fish1 >= FisherRange && fish2 >= FisherRange ? true : false;
+   bool fish_os = fish1 <= FisherRange*-1 && fish2 <= FisherRange*-1 ? true : false;
+   
+   // Bounds checks & Sanity Tests
+   if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0)
+      msg+="Error: StochRSI Bounds. Value:"+(string)stochrsi+", Signal="+(string)signal;
+   if(fish1 == 0 || fish2 == 0 || MathAbs(fish1) > 10 || MathAbs(fish2) > 10)
+      msg+="\nError: Fisher Bounds. Fish1:"+(string)fish1+", Fish2:"+(string)fish2; 
+   if(StringLen(msg)>1) {
+      if(DEBUG==true) 
+         Print(msg);
       return 0;
    }
-   
-   if(stochrsi>=StochOverbought && stochrsi < signal) {
-      if(fish1 >= FisherRange) { //&& fish2 >= FisherRange) {
-         if(DEBUG==true)
-            Print("Sell signal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher1=", fish1, ", Fisher2=", fish2);
-         return -1;
-      }
-   }
-   if(stochrsi <= StochOversold && stochrsi > signal) {
-      if(fish1 <= FisherRange*-1) { //&& fish2 <= FisherRange*-1) {
-         if(DEBUG==true)
-            Print("Buy sginal. StochRSI=", (int)stochrsi, ", Signal=", (int)signal, ", Fisher=", fish1);
-         return 1;
+   else {
+      if(DEBUG==true) {
+         msg+="StochRSI Value:"+(string)stochrsi+", Signal:"+(string)signal+
+            ", Fisher1:"+(string)fish1+", Fisher2:"+(string)fish2;
+         msg+="\nStochRSI OS:"+(string)stoch_os+", OB:"+(string)stoch_ob+
+            ", Fisher OS:"+(string)fish_os+", OB:"+(string)fish_ob;
+         Print(msg);
       }
    }
    
-   if(DEBUG==true)
-      Print("StochRSI: ", stochrsi, ", Signal: ", signal, ", Fisher: ", fish1);
+   /*** Return Buy/Sell signals ***/
+   if(stoch_ob && fish_ob) {
+      if(DEBUG==true)
+         Print("Overbought confluence. StochRSI:",(int)stochrsi,", Signal:",(int)signal,
+            ", Fisher1:",fish1,", Fisher2:",fish2);
+      return -1;
+   }
+   if(stoch_os && fish_os) {
+      if(DEBUG==true)
+         Print("Oversold confluence. StochRSI:",(int)stochrsi,", Signal:",(int)signal,
+            ", Fisher1:",fish1,"Fisher2:",fish2);
+      return 1;
+   }
    return 0;
 }
 
