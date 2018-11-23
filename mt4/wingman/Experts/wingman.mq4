@@ -3,42 +3,48 @@
 //|                                 Copyright 2018, Wing Enterprises |
 //|                                         https://www.wingcorp.com |
 //+------------------------------------------------------------------+
+#include <utility.mqh>
 #property copyright "Copyright 2018, Wing Enterprises"
 #property link      "https://www.wingcorp.com"
 #property version   "1.00"
 #property strict
-
 #define MAGICMA  20131111
 
-//--- Inputsu
-input bool   DEBUG            = false;
+//--- Inputs
+input bool   DEBUG            = true;
 input double Lots             = 1.0;
 input int    TakeProfit       = 15;    
-input int    StopLoss         = 5;
+input int    StopLoss         = 15;
 input int    RSIPeriod        = 10;
 input int    KPeriod          = 10;
 input int    DPeriod          = 2;
 input int    Slowing          = 2;
-input int    StochOverbought  = 90;
-input int    StochOversold    = 10;
-input int    FisherPeriod     = 9;
-input double FisherRange      = 1.25;
+input int    StochOverbought  = 80;
+input int    StochOversold    = 20;
+input int    FisherPeriod     = 10;
+input double FisherRange      = 0.9;
+extern bool  bPlotIndicatorWhenTesting=true;
 
+int nTrades=0;
 
 double GetLots() {return Lots;}
 int CalculateCurrentOrders(string symbol) {return 1;}
-
 
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 int OnInit() {
+   int id=0;//ChartID();
+   if(IsVisualMode())
+      id=0;
+      
    string text = "Wingman!";
    ObjectCreate(0,"label",OBJ_LABEL,0,0,0);
-   ObjectSetString(0,"label",OBJPROP_TEXT,text);
+   ObjectSetString(0,"label",OBJPROP_TEXT,"nTrades: N/A");
    ObjectSetInteger(0,"label",OBJPROP_XDISTANCE,5);
-   ObjectSetInteger(0,"label",OBJPROP_YDISTANCE,20);
+   ObjectSetInteger(0,"label",OBJPROP_YDISTANCE,50);
    ObjectSetInteger(0,"label",OBJPROP_COLOR,clrForestGreen);
+   log("********** Wingman Initialized **********");
    return(INIT_SUCCEEDED);
 }
 
@@ -47,7 +53,10 @@ int OnInit() {
 //+---------------------------------------------------------------------------+
 void OnDeinit(const int reason) {
 //---
-   ObjectDelete("label");
+   //ObjectDelete("label");
+   log("SUMMARY. Trades Found: ", (string)nTrades);
+   log("********** Wingman Test Complete **********");
+   //ObjectSetString(0,"label",OBJPROP_TEXT,"SUMMARY. Trades Found: "+(string)nTrades);
 }
   
 //+---------------------------------------------------------------------------+
@@ -55,19 +64,19 @@ void OnDeinit(const int reason) {
 //+---------------------------------------------------------------------------+
 void OnTick() {   
 //---
-   if(Bars<100 || IsTradeAllowed()==false || !NewBar()) {
-      //Print("Could not trade!");
+   if(!NewBar())
       return;
-   }
-   if(Volume[0]>1)     // What does this do?!?!?!
-      return;
-      
+ 
    int signal = GenerateSignal();
-   
    if(signal==0) {
-      //Print("No trade signal.");
+      ObjectSetString(0,"label",OBJPROP_TEXT,"Trades: "+(string)nTrades);
+      //log("No trade this bar");
       return;
    }
+   else {
+      nTrades++;
+      ObjectSetString(0,"label",OBJPROP_TEXT,"Trades: "+(string)nTrades);
+   } 
        
    /*** Iterate through open positions, close as necessary ***/
    
@@ -94,10 +103,10 @@ void OnTick() {
          result = OrderClose(OrderTicket(), OrderLots(), Bid, 3, White);
       
       if(result != 1) {
-         Alert("ERROR closing Order ", OrderTicket());
+         log("ERROR closing Order ", (string)OrderTicket());
       }
       else
-         Alert("Closed Order ", OrderTicket());
+         log("Closed Order ", OrderTicket());
    }
    
    /*** Open Positions. Calculate stops/profit levels (in pips), submit orders ***/
@@ -120,15 +129,16 @@ void OnTick() {
    
    if(result == -1) { 
       double minstoplevel=MarketInfo(Symbol(), MODE_STOPLEVEL);
-      Alert("ERROR: SendOrder code ", GetLastError());
-      Alert(Symbol(), "minStopLevel=", minstoplevel, " TP=",TP, ", SL=", SL);
+      log("ERROR: SendOrder code ", GetLastError());
+      log(Symbol(), "minStopLevel=", (string)minstoplevel, " TP=",(string)TP, ", SL=", (string)SL);
    }
    else {
-      Print("OrderID:", result, " P:", price, " TP:", TP, " SL:", SL);
+      log("OrderID:", result, " P:", (string)price, " TP:", (string)TP, " SL:", (string)SL);
    }
    
    return;
 }
+
 
 //+----------------------------------------------------------------------------+
 //|**************************** SIGNAL ALGOS **********************************|
@@ -143,48 +153,47 @@ int GenerateSignal() {
    string msg="";
    double stochrsi = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,0,0);
    double signal = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,1,0);
-   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 0, 0);
-   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod, 1, 0);
+   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 0, 0);
+   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 1, 0);
    
-   bool stoch_ob = stochrsi>=StochOverbought && stochrsi < signal ? true : false;
-   bool stoch_os = stochrsi <= StochOversold && stochrsi > signal ? true : false;
-   bool fish_ob = fish1 >= FisherRange && fish2 >= FisherRange ? true : false;
-   bool fish_os = fish1 <= FisherRange*-1 && fish2 <= FisherRange*-1 ? true : false;
+   string fish1str = DoubleToString(fish1,2);
+   string fish2str = DoubleToString(fish2,2);
+   string stochstr = DoubleToString(stochrsi,0);
+   string signalstr = DoubleToString(signal,0);
+   
+   bool stoch_ob = stochrsi>=StochOverbought && signal >=StochOverbought && stochrsi < signal ? true : false;
+   bool stoch_os = stochrsi <= StochOversold && signal<=StochOversold && stochrsi > signal ? true : false;
+   bool fish_ob = fish1 >= FisherRange || fish2 >= FisherRange ? true : false;
+   bool fish_os = fish1 <= FisherRange*-1 || fish2 <= FisherRange*-1 ? true : false;
    
    // Bounds checks & Sanity Tests
-   if(stochrsi>100.0 || stochrsi<0 || signal>100.0 || signal<0)
-      msg+="Error: StochRSI Bounds. Value:"+(string)stochrsi+", Signal="+(string)signal;
-   if(fish1 == 0 || fish2 == 0 || MathAbs(fish1) > 10 || MathAbs(fish2) > 10)
-      msg+="\nError: Fisher Bounds. Fish1:"+(string)fish1+", Fish2:"+(string)fish2; 
-   if(StringLen(msg)>1) {
-      if(DEBUG==true) 
-         Print(msg);
+   if(stochrsi>100)
+      stochrsi=100.0;
+   if(signal>100)
+      signal=100.0;
+   if(stochrsi>100 || stochrsi<0 || signal>100.0 || signal<0 || MathAbs(fish1)>10 || MathAbs(fish2)>10) {
+      log("BOUNDS ERROR! StochRSI("+stochrsi+","+signal+"), Fisher(",fish1str,",",fish2str,")");
       return 0;
    }
-   else {
-      if(DEBUG==true) {
-         msg+="StochRSI Value:"+(string)stochrsi+", Signal:"+(string)signal+
-            ", Fisher1:"+(string)fish1+", Fisher2:"+(string)fish2;
-         msg+="\nStochRSI OS:"+(string)stoch_os+", OB:"+(string)stoch_ob+
-            ", Fisher OS:"+(string)fish_os+", OB:"+(string)fish_ob;
-         Print(msg);
-      }
-   }
+  
+   //if(fish_ob || fish_os)
+   //   Print("Fisher signal(",fish1str,",",fish2str,")!");
+   //if(stoch_ob || stoch_os)
+   //   Print("Stoch signal(",stochstr,",",signalstr,")!");
    
+   log("StochRSI("+stochstr+","+signalstr+"), Fisher("+fish1str+","+fish2str+")");
+         
    /*** Return Buy/Sell signals ***/
    if(stoch_ob && fish_ob) {
-      if(DEBUG==true)
-         Print("Overbought confluence. StochRSI:",(int)stochrsi,", Signal:",(int)signal,
-            ", Fisher1:",fish1,", Fisher2:",fish2);
+      log("Overbought confluence! StochRSI("+stochstr+","+signalstr+"), Fisher(",fish1str,",",fish2str,")");
       return -1;
    }
-   if(stoch_os && fish_os) {
-      if(DEBUG==true)
-         Print("Oversold confluence. StochRSI:",(int)stochrsi,", Signal:",(int)signal,
-            ", Fisher1:",fish1,"Fisher2:",fish2);
+    else if(stoch_os && fish_os) {
+      log("Oversold confluence! StochRSI("+stochstr+","+signalstr,"), Fisher(",fish1str,",",fish2str,")");
       return 1;
    }
-   return 0;
+   else
+      return 0;
 }
 
 
@@ -200,21 +209,5 @@ int HullMA(int length) {
    //diff=n2ma-nma
    //sqn=round(sqrt(n))
    return 1;
-}
-
-
-//+----------------------------------------------------------------------------+
-//|**************************** UTILITY METHODS ******************************/
-//+----------------------------------------------------------------------------+
-
-bool NewBar() {
-    static datetime lastbar;
-    datetime curbar = Time[0];  
-    if(lastbar != curbar) {
-       lastbar=curbar;
-       return true;
-    }
-    else
-      return false;
 }
 
