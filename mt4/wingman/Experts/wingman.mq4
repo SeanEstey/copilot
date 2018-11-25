@@ -15,9 +15,9 @@ input bool   DEBUG            = true;
 input double Lots             = 1.0;
 input int    TakeProfit       = 15;    
 input int    StopLoss         = 15;
-input int    RSIPeriod        = 10;
+input int    RSIPeriod        = 14;
 input int    KPeriod          = 10;
-input int    DPeriod          = 2;
+input int    DPeriod          = 3;
 input int    Slowing          = 2;
 input int    StochOverbought  = 80;
 input int    StochOversold    = 20;
@@ -34,10 +34,6 @@ int CalculateCurrentOrders(string symbol) {return 1;}
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 int OnInit() {
-   int id=0;//ChartID();
-   if(IsVisualMode())
-      id=0;
-      
    string text = "Wingman!";
    ObjectCreate(0,"label",OBJ_LABEL,0,0,0);
    ObjectSetString(0,"label",OBJPROP_TEXT,"nTrades: N/A");
@@ -53,10 +49,11 @@ int OnInit() {
 //+---------------------------------------------------------------------------+
 void OnDeinit(const int reason) {
 //---
-   //ObjectDelete("label");
-   log("SUMMARY. Trades Found: ", (string)nTrades);
+   ObjectDelete("label");
+   
    log("********** Wingman Test Complete **********");
-   //ObjectSetString(0,"label",OBJPROP_TEXT,"SUMMARY. Trades Found: "+(string)nTrades);
+   log((string)nTrades+" trades made.");
+   log("*******************************************");
 }
   
 //+---------------------------------------------------------------------------+
@@ -64,8 +61,8 @@ void OnDeinit(const int reason) {
 //+---------------------------------------------------------------------------+
 void OnTick() {   
 //---
-   if(!NewBar())
-      return;
+ //  if(!NewBar())
+ //     return;
  
    int signal = GenerateSignal();
    if(signal==0) {
@@ -149,42 +146,33 @@ void OnTick() {
 //| and Fisher Transform in extreme range.
 //| Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
 //+----------------------------------------------------------------------------+
-int GenerateSignal() {
-   string msg="";
-   double stochrsi = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,0,0);
-   double signal = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,1,0);
-   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 0, 0);
-   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 1, 0);
+int GenerateSignal() {   
+   double stochrsi = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,80,20,0,Slowing);
+   double signal = iCustom(NULL,0,"StochRSI",RSIPeriod,KPeriod,DPeriod,Slowing,80,20,1,Slowing);
+   double fish1 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 0,0);
+   double fish2 =  iCustom(NULL,0,"FisherTransform", FisherPeriod,FisherRange, 1,0);
+
+   bool ob1 = stochrsi>=StochOverbought && signal >=StochOverbought && stochrsi < signal ? true : false;
+   bool os1 = stochrsi <= StochOversold && signal<=StochOversold && stochrsi > signal ? true : false;
+   bool ob2 = fish1 >= FisherRange || fish2 >= FisherRange ? true : false;
+   bool os2 = fish1 <= FisherRange*-1 || fish2 <= FisherRange*-1 ? true : false;
+   bool osos = os1 && os2 ? true : false;
+   bool obob = ob1 && ob2 ? true : false;
+   string s11 = DoubleToString(stochrsi,1);
+   string s12 = DoubleToString(signal,1);
+   string f11 = DoubleToString(fish1,2);
+   string f12 = DoubleToString(fish2,2);
    
-   string fish1str = DoubleToString(fish1,2);
-   string fish2str = DoubleToString(fish2,2);
-   string stochstr = DoubleToString(stochrsi,0);
-   string signalstr = DoubleToString(signal,0);
+   log("Signals: S=["+s11+","+s12+"], F=["+f11+","+f12+"] Confluence OB=["+ob1+","+ob2+"], "+"OS=["+os1+","+os2+
+      "], Confluence=["+(osos || obob)+"]"); 
    
-   bool stoch_ob = stochrsi>=StochOverbought && signal >=StochOverbought && stochrsi < signal ? true : false;
-   bool stoch_os = stochrsi <= StochOversold && signal<=StochOversold && stochrsi > signal ? true : false;
-   bool fish_ob = fish1 >= FisherRange || fish2 >= FisherRange ? true : false;
-   bool fish_os = fish1 <= FisherRange*-1 || fish2 <= FisherRange*-1 ? true : false;
+   return osos ? 1 : obob ? -1 : 0;
    
-   // Bounds checks & Sanity Tests
-   if(stochrsi>100)
-      stochrsi=100.0;
-   if(signal>100)
-      signal=100.0;
-   if(stochrsi>100 || stochrsi<0 || signal>100.0 || signal<0 || MathAbs(fish1)>10 || MathAbs(fish2)>10) {
-      log("BOUNDS ERROR! StochRSI("+stochrsi+","+signal+"), Fisher(",fish1str,",",fish2str,")");
-      return 0;
-   }
-  
-   //if(fish_ob || fish_os)
-   //   Print("Fisher signal(",fish1str,",",fish2str,")!");
-   //if(stoch_ob || stoch_os)
-   //   Print("Stoch signal(",stochstr,",",signalstr,")!");
-   
-   log("StochRSI("+stochstr+","+signalstr+"), Fisher("+fish1str+","+fish2str+")");
-         
-   /*** Return Buy/Sell signals ***/
-   if(stoch_ob && fish_ob) {
+   //if(ob1 && os2 || os1 && ob2) {
+   //   log("Signal divergence, StochRSI:("+s11+","+s12+"),Fisher(",f11,",",f12,")");
+   //   return -1;
+   //}
+   /* if(stoch_ob && fish_ob) {
       log("Overbought confluence! StochRSI("+stochstr+","+signalstr+"), Fisher(",fish1str,",",fish2str,")");
       return -1;
    }
@@ -192,8 +180,9 @@ int GenerateSignal() {
       log("Oversold confluence! StochRSI("+stochstr+","+signalstr,"), Fisher(",fish1str,",",fish2str,")");
       return 1;
    }
+   
    else
-      return 0;
+      return 0; */
 }
 
 
