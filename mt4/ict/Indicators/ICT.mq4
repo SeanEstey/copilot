@@ -27,6 +27,17 @@ datetime swinglows[];
 datetime swinghighs[];
 string ObjectList[];
 
+//--- Price swing properties
+struct impulse {
+   int direction;    // 1:up, -1:down, 0:none
+   int start_ibar;
+   int end_ibar;
+   datetime startdt;
+   datetime enddt;
+   double   height;
+   double   std;
+};
+
 //--- Global constants
 bool initHasRun            = false;
 string mktStructLbl        = "Market Structure";
@@ -80,10 +91,10 @@ int OnInit() {
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    
-   for(int i=0; i<ArraySize(ObjectList); i++) {
+   /*for(int i=0; i<ArraySize(ObjectList); i++) {
       int r=ObjectDelete(ObjectList[i]);
       log("deleted object "+(string)ObjectList[i]+", result:"+(string)r+", Desc:"+GetLastError());
-   }
+   }*/
    ObjectsDeleteAll();
    log("********** ICT De-initialized **********");
    return;
@@ -105,8 +116,7 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {   
    int iBar;   // TimeSeries
-   MqlDateTime dt1, dt2;
-   
+  
    ArraySetAsSeries(time,true);
    ArraySetAsSeries(open,true);
    ArraySetAsSeries(high,true);
@@ -127,38 +137,12 @@ int OnCalculate(const int rates_total,
  
    // Identify/annotate key daily swings
    for(int i=0; i<rates_total; i++){
-      TimeToStruct(time[iBar], dt1);
-      if(dt1.hour == 18 && dt1.min == 0) {
-         CreateVLine(iBar+1, ObjectList);   
-         TimeToStruct(time[iBar], dt2);
-         dt2.day-=1;
-         int dailybars = Bars(Symbol(),0, time[iBar],StructToTime(dt2));
-         
-         int iLBar = iLowest(Symbol(), 0, MODE_LOW, dailybars, iBar);
-         CreateLine("daily_low_"+iBar, time[iBar], low[iLBar], StructToTime(dt2),
-            low[iLBar], clrRed, ObjectList);
-                  
-         int iHBar = iHighest(Symbol(), 0, MODE_HIGH, dailybars, iBar);
-         CreateLine("daily_high_"+iBar, time[iBar], high[iHBar], StructToTime(dt2),
-            high[iHBar], clrRed, ObjectList);
-         
-         // Identify significant daily swings 
-         if(isSwingLow(iLBar, low)) {
-            CreateArrow("swinglow_"+iLBar, Symbol(), OBJ_ARROW_UP, iLBar, clrBlue, ObjectList);
-            appendDtArray(swinglows, time[iLBar]);
-            log("Found daily swinglow on "+TimeToStr(time[iLBar],TIME_DATE|TIME_MINUTES)+", Low:"+low[iLBar]);
-         }
-         if(isSwingHigh(iHBar,high)) {
-            CreateArrow("swinghigh_"+iHBar, Symbol(), OBJ_ARROW_DOWN, iHBar, clrBlue, ObjectList);
-            appendDtArray(swinglows, time[iHBar]);
-            log("Found daily swinghigh on "+TimeToStr(time[iHBar],TIME_DATE|TIME_MINUTES)+", High:"+high[iHBar]);
-         }
-      }
-      
+      UpdateDailySwings(iBar);
       MktStructBuf[iBar] = 0;
       iBar++;
    }
  
+   UpdateImpulseMoves(iBar-rates_total,30);
    return(rates_total);
 }
 
@@ -186,6 +170,107 @@ void OnChartEvent(const int id,
 // ************************ Core Logic ***************************************/
 //+---------------------------------------------------------------------------+
 
+
+//+---------------------------------------------------------------------------+
+//| If iBar arrives at daily close, identify the significant swing highs/lows
+//| for that week with chart annotations.
+//+---------------------------------------------------------------------------+
+void UpdateDailySwings(int iBar) {
+   MqlDateTime dt1, dt2;
+   TimeToStruct(Time[iBar], dt1);
+   
+   if(dt1.hour == 18 && dt1.min == 0) {
+      CreateVLine(iBar+1, ObjectList);   
+      TimeToStruct(Time[iBar], dt2);
+      dt2.day-=1;
+      int dailybars = Bars(Symbol(),0, Time[iBar],StructToTime(dt2));
+      
+      int iLBar = iLowest(Symbol(), 0, MODE_LOW, dailybars, iBar);
+      int iHBar = iHighest(Symbol(), 0, MODE_HIGH, dailybars, iBar);
+      
+      CreateLine("daily_low_"+iBar, Time[iBar], Low[iLBar], StructToTime(dt2),
+         Low[iLBar], clrRed, ObjectList);         
+      CreateLine("daily_high_"+iBar, Time[iBar], High[iHBar], StructToTime(dt2),
+         High[iHBar], clrRed, ObjectList);
+      
+      // Identify significant daily swings 
+      if(isSwingLow(iLBar, Low)) {
+         CreateArrow("swinglow_"+iLBar, Symbol(), OBJ_ARROW_UP, iLBar, clrBlue, ObjectList);
+         appendDtArray(swinglows, Time[iLBar]);
+         
+         //log("Found daily swinglow on "+TimeToStr(Time[iLBar],TIME_DATE|TIME_MINUTES)+", Low:"+Low[iLBar]);
+      }
+      if(isSwingHigh(iHBar,High)) {
+         CreateArrow("swinghigh_"+iHBar, Symbol(), OBJ_ARROW_DOWN, iHBar, clrBlue, ObjectList);
+         appendDtArray(swinglows, Time[iHBar]);
+         
+         //log("Found daily swinghigh on "+TimeToStr(Time[iHBar],TIME_DATE|TIME_MINUTES)+", High:"+High[iHBar]);
+      }
+   }
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+void UpdateImpulseMoves(int iBar, int period) {
+   impulse moves[];  // Non-TS (left-to-right index)
+   
+   for(int i=iBar; i<iBar+period; i++) {
+      if(i==iBar) {
+         // Init new impulse
+         impulse x;
+         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+         x.start_ibar=i;
+         x.end_ibar=i;
+         x.startdt=Time[i];
+         x.enddt=Time[i];
+         x.height=Close[i]-Open[i];
+         
+         // Save it
+         ArrayResize(moves, ArraySize(moves)+1);
+         moves[ArraySize(moves)-1]=x;
+         continue;
+      }
+      
+      int dir=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+      impulse last = moves[ArraySize(moves)-1];
+      
+      // Merge properties of impulses chained together.
+      // New impulse extends move by 1 bar to the left.
+      // Extend startdt, start_ibar, and height
+      if(last.direction == dir) {
+         last.height=Close[last.end_ibar]-Open[i];
+         last.start_ibar=i;
+         last.startdt=Time[i];
+      }
+      // New impulse
+      else {
+         impulse x;
+         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+         x.start_ibar=i;
+         x.end_ibar=i;
+         x.startdt=Time[i];
+         x.enddt=Time[i];
+         x.height=Close[i]-Open[i];
+         ArrayResize(moves, ArraySize(moves)+1);
+         moves[ArraySize(moves)-1]=x;
+      }
+   }
+   
+   log("Updated impulses from iBar "+iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(moves));
+   
+   double heights[];
+   ArrayResize(heights,ArraySize(moves))
+   ;
+   for(int i=0; i<ArraySize(moves); i++) {
+      heights[i] = moves[i].height;
+   }
+   double mean_height = Average(heights);
+   double variance = Variance(heights, mean_height);
+   double std = MathSqrt(variance);
+   
+   log("Mean impulse height:"+(string)mean_height+", Std_Dev:"+(string)std);
+}
 
 //+---------------------------------------------------------------------------+
 //| 
