@@ -15,9 +15,24 @@
 #property indicator_color1 Black
 
 //---- Input params
-sinput int ShortTermLen    =24;
-sinput int MidTermLen      =10;
-sinput int LongTermLen     =10;
+sinput int ShortTermLen       =24;
+sinput int MidTermLen         =10;
+sinput int LongTermLen        =10;
+sinput int MinImpulseStdDevs  =3;
+
+//---  Structs
+struct impulse {
+   // Price swing properties
+   int direction;    // 1:up, -1:down, 0:none
+   int start_ibar;
+   int end_ibar;
+   int chainlen;
+   int ob_ibar;
+   datetime startdt;
+   datetime enddt;
+   double height;
+   double n_deviations;
+};
 
 //--- Buffers
 double MktStructBuf[];
@@ -26,17 +41,7 @@ double MktStructBuf[];
 datetime swinglows[];
 datetime swinghighs[];
 string ObjectList[];
-
-//--- Price swing properties
-struct impulse {
-   int direction;    // 1:up, -1:down, 0:none
-   int start_ibar;
-   int end_ibar;
-   datetime startdt;
-   datetime enddt;
-   double   height;
-   double   std;
-};
+impulse impulses[];  // Non-TS (left-to-right)
 
 //--- Global constants
 bool initHasRun            = false;
@@ -80,6 +85,8 @@ int OnInit() {
    ObjectSetInteger(0,retraceLbl,OBJPROP_COLOR,clrBlack);
    
    ArrayResize(MktStructBuf,1);
+   
+   log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT));
    
    log("********** ICT Initialized **********");
    initHasRun=true;
@@ -142,7 +149,7 @@ int OnCalculate(const int rates_total,
       iBar++;
    }
  
-   UpdateImpulseMoves(iBar-rates_total,30);
+   UpdateImpulseMoves(iBar-rates_total,300);
    return(rates_total);
 }
 
@@ -167,9 +174,33 @@ void OnChartEvent(const int id,
 
 
 //+---------------------------------------------------------------------------+
-// ************************ Core Logic ***************************************/
+// ************************ Price Action / ICT Methods ***********************/
 //+---------------------------------------------------------------------------+
 
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+bool isSwingHigh(int iBar, const double &highs[]) {
+   if(iBar <=0 || iBar >=ArraySize(highs)-1)
+      return false;
+   if(highs[iBar] > highs[iBar+1] && highs[iBar] > highs[iBar-1])
+      return true;
+   else
+      return false;
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+bool isSwingLow(int iBar, const double &lows[]) {
+   if(iBar<=0 || iBar>=ArraySize(lows)-1)
+      return false;
+   if(lows[iBar] < lows[iBar+1] && lows[iBar] < lows[iBar-1])
+      return true;
+   else
+      return false;
+}
 
 //+---------------------------------------------------------------------------+
 //| If iBar arrives at daily close, identify the significant swing highs/lows
@@ -197,14 +228,10 @@ void UpdateDailySwings(int iBar) {
       if(isSwingLow(iLBar, Low)) {
          CreateArrow("swinglow_"+iLBar, Symbol(), OBJ_ARROW_UP, iLBar, clrBlue, ObjectList);
          appendDtArray(swinglows, Time[iLBar]);
-         
-         //log("Found daily swinglow on "+TimeToStr(Time[iLBar],TIME_DATE|TIME_MINUTES)+", Low:"+Low[iLBar]);
       }
       if(isSwingHigh(iHBar,High)) {
          CreateArrow("swinghigh_"+iHBar, Symbol(), OBJ_ARROW_DOWN, iHBar, clrBlue, ObjectList);
          appendDtArray(swinglows, Time[iHBar]);
-         
-         //log("Found daily swinghigh on "+TimeToStr(Time[iHBar],TIME_DATE|TIME_MINUTES)+", High:"+High[iHBar]);
       }
    }
 }
@@ -213,7 +240,10 @@ void UpdateDailySwings(int iBar) {
 //| 
 //+---------------------------------------------------------------------------+
 void UpdateImpulseMoves(int iBar, int period) {
-   impulse moves[];  // Non-TS (left-to-right index)
+ 
+   impulse moves[];
+ 
+   double point=MarketInfo(Symbol(),MODE_POINT);
    
    for(int i=iBar; i<iBar+period; i++) {
       if(i==iBar) {
@@ -222,9 +252,12 @@ void UpdateImpulseMoves(int iBar, int period) {
          x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
          x.start_ibar=i;
          x.end_ibar=i;
+         x.chainlen=1;
          x.startdt=Time[i];
          x.enddt=Time[i];
-         x.height=Close[i]-Open[i];
+         x.height=(Close[i]-Open[i])/point;
+         x.ob_ibar=-1;
+         x.n_deviations=0;
          
          // Save it
          ArrayResize(moves, ArraySize(moves)+1);
@@ -239,9 +272,12 @@ void UpdateImpulseMoves(int iBar, int period) {
       // New impulse extends move by 1 bar to the left.
       // Extend startdt, start_ibar, and height
       if(last.direction == dir) {
-         last.height=Close[last.end_ibar]-Open[i];
+         log("Found an impulse chain!");
+         last.height+=(Close[i]-Open[i])/point;
          last.start_ibar=i;
+         last.chainlen++;
          last.startdt=Time[i];
+         moves[ArraySize(moves)-1] = last;
       }
       // New impulse
       else {
@@ -249,49 +285,78 @@ void UpdateImpulseMoves(int iBar, int period) {
          x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
          x.start_ibar=i;
          x.end_ibar=i;
+         x.chainlen=1;
          x.startdt=Time[i];
          x.enddt=Time[i];
-         x.height=Close[i]-Open[i];
+         x.height=(Close[i]-Open[i])/point;
+         x.n_deviations=0;
+         x.ob_ibar=-1;
          ArrayResize(moves, ArraySize(moves)+1);
          moves[ArraySize(moves)-1]=x;
       }
    }
    
-   log("Updated impulses from iBar "+iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(moves));
    
+   
+
    double heights[];
-   ArrayResize(heights,ArraySize(moves))
-   ;
+   ArrayResize(heights,ArraySize(moves));
    for(int i=0; i<ArraySize(moves); i++) {
       heights[i] = moves[i].height;
    }
    double mean_height = Average(heights);
    double variance = Variance(heights, mean_height);
    double std = MathSqrt(variance);
+      
+   for(int i=0; i<ArraySize(moves); i++){
+      moves[i].n_deviations = moves[i].height/std;
+      if(MathAbs(moves[i].n_deviations) >= MinImpulseStdDevs) {
+         moves[i].ob_ibar=moves[i].start_ibar+1;
+         ArrayResize(impulses, ArraySize(impulses)+1);
+         // **** WARNING: PROBABLY NOT SAFE ********
+         impulses[ArraySize(impulses)-1]=moves[i];
+      }     
+   }
    
-   log("Mean impulse height:"+(string)mean_height+", Std_Dev:"+(string)std);
+   log("Updated impulses from iBar "+iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(impulses));
+   
+   int max_up=0, max_down=0;
+   for(int i=1; i<ArraySize(impulses); i++) {      
+      if(impulses[i].height > impulses[max_up].height)
+         max_up=i;
+      else if(impulses[i].height < impulses[max_down].height)
+         max_down=i;
+   }
+   
+   impulses[max_up].n_deviations = impulses[max_up].height/std;
+   if(MathAbs(impulses[max_up].n_deviations) >= 3)
+      impulses[max_up].ob_ibar=impulses[max_up].start_ibar+1;
+      
+   impulses[max_down].n_deviations = impulses[max_down].height/std;
+   if(MathAbs(impulses[max_down].n_deviations) >= 3)
+      impulses[max_down].ob_ibar=impulses[max_down].start_ibar+1;
+   
+   log("Mean chain height:"+DoubleToStr(mean_height,2)+" pips, Std_Dev:"+DoubleToStr(std,2)+" pips");
+   log(impulseToStr(impulses[max_up], std));
+   log(impulseToStr(impulses[max_down], std));
+ 
 }
 
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-bool isSwingHigh(int iBar, const double &highs[]) {
-   if(iBar <=0 || iBar >=ArraySize(highs)-1)
-      return false;
-   if(highs[iBar] > highs[iBar+1] && highs[iBar] > highs[iBar-1])
-      return true;
-   else
-      return false;
+string impulseToStr(impulse& x, double std) {
+   double point=MarketInfo(Symbol(),MODE_POINT);
+   string dir= x.direction == 1 ? "upward" : x.direction==-1 ? "downward" : "sideways"; 
+   string s = TimeToStr(x.startdt)+": "+(string)x.chainlen+"-chain "+dir+" impulse, height:"+DoubleToStr(x.height,2)+" pips, "+DoubleToStr(x.n_deviations,2)+"x STD. ";
+   if(x.ob_ibar >=0)
+      s+=" Parent OrderBlock: iBar["+(string)x.ob_ibar+"]";
+   return s;
 }
 
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-bool isSwingLow(int iBar, const double &lows[]) {
-   if(iBar<=0 || iBar>=ArraySize(lows)-1)
-      return false;
-   if(lows[iBar] < lows[iBar+1] && lows[iBar] < lows[iBar-1])
-      return true;
-   else
-      return false;
+string GetOrderBlockDesc(int iBar) {
+   return "";
 }
