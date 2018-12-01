@@ -11,17 +11,21 @@
 #define MAGICMA  20131111
 
 //--- Inputs
-sinput double Lots            = 1.0;
-sinput int    TakeProfit      = 75;    
-sinput int    StopLoss        = 25;
-sinput int    RSILen          = 10;
-sinput int    KLen            = 10;
-sinput int    DLen            = 2;
-sinput int    Slowing         = 2;
-sinput int    StochOB         = 90;
-sinput int    StochOS         = 10;
-sinput double FishBands       = 1.0;
-sinput int    FishLen         = 10;
+input int    _RSILen          = 10;
+input int    _KLen            = 10;
+input int    _DLen            = 2;
+input int    _Slowing         = 2;
+input int    _StochOB         = 91;
+input int    _StochOS         = 11;
+input int    _FishLen         = 10;         
+input double _FishBands       = 1.0;        
+
+// Number of bars to include in calculation
+// Absolute value of upper and lower bands
+
+double Lots             = 1.0;
+int    TakeProfit       = 75;   
+int    StopLoss         = 25;
 
 //--- Globals
 int nTrades=0;
@@ -34,6 +38,7 @@ string OrderTypes[6] = {"BUY", "SELL", "BUYLIMIT", "BUYSTOP", "SELLLIMIT", "SELL
 int SLOrders[];
 int TPOrders[];
 int Orders[];
+string ObjList[];
 
 double GetLots() {return Lots;}
 int CalculateCurrentOrders(string symbol) {return 1;}
@@ -68,8 +73,14 @@ int OnInit() {
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 void OnDeinit(const int reason) {
-   ObjectDelete(ntrades_lbl); 
-   ObjectDelete(npos_lbl); 
+   log("Wingman Deinit. ObjList.size:"+(string)ArraySize(ObjList)+", IsTesting:"+IsTesting());
+   log("ObjList:"+strArrayToStr(ObjList));
+   
+   if(!IsTesting()) {
+      ObjectDelete(ntrades_lbl); 
+      ObjectDelete(npos_lbl); 
+      ObjectsDeleteAll();
+   }
 }
 
 //+---------------------------------------------------------------------------+
@@ -83,9 +94,9 @@ double OnTester() {
    log((string)nStops+" orders hit StopLoss.");
    log((string)nTakeProfit+" orders hit TakeProfit.");
    log("*******************************************");
-   log("Orders: "+printArray(Orders));
-   log("SLOrders: "+printArray(SLOrders));
-   log("TPOrders: "+printArray(TPOrders));
+   log("Orders: "+intArrayToStr(Orders));
+   log("SLOrders: "+intArrayToStr(SLOrders));
+   log("TPOrders: "+intArrayToStr(TPOrders));
    return 0.0;
 }
 
@@ -123,10 +134,12 @@ void CheckClosedOrders() {
       if(OrderStopLoss()==OrderClosePrice() || StringFind(OrderComment(), "[sl]", 0)!=-1){  
          if(SLOrders[ArrayBsearch(SLOrders, ticket)] != ticket) {
             log("Order #"+(string)ticket+" hit SL!");
+            CreateArrow((string)ticket+"_SL", Symbol(), OBJ_ARROW_STOP,
+               iBarShift(Symbol(),0,OrderCloseTime()), clrRed, ObjList);
             ArrayResize(SLOrders,ArraySize(SLOrders)+1);
             SLOrders[ArraySize(SLOrders)-1] = ticket;
             ArraySort(SLOrders, WHOLE_ARRAY, 0, MODE_ASCEND);
-            ObjCreate((string)ticket+"_SL",Symbol(),OBJ_ARROW_STOP,0,clrRed,ANCHOR_BOTTOM);
+            
             nStops++;
             nPositions--;
          }
@@ -134,13 +147,16 @@ void CheckClosedOrders() {
       // Check if TakeProfit was hit
       else if(OrderProfit()==OrderClosePrice() || StringFind(OrderComment(), "[tp]", 0)!=-1){
          if(TPOrders[ArrayBsearch(TPOrders, ticket)] != ticket) {
-            log("Order #"+(string)ticket+" hit TP!");
+            CreateArrow((string)ticket+"_TP",Symbol(),OBJ_ARROW_CHECK,
+               iBarShift(Symbol(),0,OrderCloseTime()), clrGreen, ObjList);
             ArrayResize(TPOrders,ArraySize(TPOrders)+1);
             TPOrders[ArraySize(TPOrders)-1] = ticket;
             ArraySort(TPOrders, WHOLE_ARRAY, 0, MODE_ASCEND);
-            ObjCreate((string)ticket+"_TP",Symbol(),OBJ_ARROW_CHECK,0,clrGreen,ANCHOR_TOP);
+            
             nTakeProfit++;
             nPositions--;   
+            
+            log("Order #"+(string)ticket+" hit TP!");
          }
       }
    }
@@ -162,19 +178,17 @@ void UpdateOpenPendingOrders() {
       if(OrderSymbol()!=Symbol() || OrderMagicNumber()!=MAGICMA)
          continue;
          
-      action = UpdatePosition();
+      action = GetExitSignal();
       
       if(action==0)
          continue;
       else if(action == 1) {
          res=OrderClose(OrderTicket(), OrderLots(), Ask, 3, clrBlue);
-         ObjCreate((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_UP,
-            0, clrRed, ANCHOR_TOP);
+         CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_UP,0,clrRed, ObjList);
       }
       else if(action == -1) {
          res=OrderClose(OrderTicket(), OrderLots(), Bid, 3, clrRed);
-         ObjCreate((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_DOWN,
-            0, clrBlue, ANCHOR_BOTTOM);
+         CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_DOWN,0, clrBlue, ObjList);
       }
       
       if(res != 1)
@@ -192,11 +206,9 @@ void UpdateOpenPendingOrders() {
 //| Evaluate new positions
 //+---------------------------------------------------------------------------+
 void CreateNewOrders() {
-
-      
    int oid, type;
    double TP=0.0, SL=0.0, price=0.0;
-   int signal = GenerateSignal();
+   int signal = GetEntrySignal();
    
    if(signal==0) {
       ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades:"+(string)nTrades);
@@ -209,7 +221,8 @@ void CreateNewOrders() {
       TP = Bid + TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
       SL = Bid - StopLoss*Point*10;
       oid = OrderSend(Symbol(),type,GetLots(),Ask,3,SL,TP,"",MAGICMA,0,clrBlue);
-      ObjCreate((string)oid+"_open", Symbol(), OBJ_ARROW_UP, 0, clrBlue, ANCHOR_TOP);
+      CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_UP, 0, clrBlue, ObjList);
+      log("ObjList.size:"+(string)ArraySize(ObjList));
    }
    else if(signal==-1){  // Sell
       type=OP_SELL;
@@ -217,7 +230,7 @@ void CreateNewOrders() {
       TP = Ask - TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
       SL = Ask + StopLoss*Point*10;
       oid = OrderSend(Symbol(),type,GetLots(),Bid,3,SL,TP,"",MAGICMA,0,clrRed);
-      ObjCreate((string)oid+"_open", Symbol(), OBJ_ARROW_DOWN, 0, clrRed, ANCHOR_BOTTOM);
+      CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_DOWN, 0, clrRed, ObjList);
    }
    else {
       log("Error creating "+(string)OrderType()+" order. Reason: "+err_msg()+
@@ -242,41 +255,40 @@ void CreateNewOrders() {
 //| and Fisher Transform in extreme range.
 //| Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
 //+----------------------------------------------------------------------------+
-int GenerateSignal() {      
-   double s1=iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      0,0);
-   //double s1_prev=iCustom(NULL,0,"StochRSI",
-   //   RSILen,KLen,DLen,Slowing,StochOB,StochOS,0,1);
-   double s2=iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      1,2);
-   double s2_prev=iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      1,2+1);
-   bool sob_trig=s2<StochOB && s2_prev>=StochOB && s2<s1 ? true : false;
-   bool sos_trig=s2>StochOS && s2_prev<=StochOS && s2>s1 ? true : false;
-                  
-   double f1=iCustom(NULL,0,"FisherTransform",
-      //FishLen,FishBands, 
-      0,0);
-   double f2=iCustom(NULL,0,"FisherTransform",
-      //FishLen,FishBands, 
-      1,0);
-   bool fob_trig=f1>FishBands && f2>FishBands ? true : false;
-   bool fos_trig=f1<FishBands*-1 && f2<FishBands*-1 ? true : false;
+int GetEntrySignal() {      
    
-   // Get HTF trend confluence
+   /***** Primary signals *****/
+   
+   double s1=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,0);
+   double s1_prev=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,1);
+   double s2=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2);
+   double s2_prev=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2+1);
+   bool sob_trig=s2<_StochOB && s2_prev>=_StochOB && s2<s1 ? true : false;
+   bool sos_trig=s2>_StochOS && s2_prev<=_StochOS && s2>s1 ? true : false;           
+   double f1=iCustom(Symbol(),0,"FisherTransform",_FishLen,_FishBands,0,0);
+   double f2=iCustom(Symbol(),0,"FisherTransform",_FishLen,_FishBands,1,0);
+   bool fob_trig=f1>_FishBands && f2>_FishBands ? true : false;
+   bool fos_trig=f1<_FishBands*-1 && f2<_FishBands*-1 ? true : false;
+   
+   /***** HTF Trend Confluence *****/
+   
    int d1_ema_fast_len = 10;
    int d1_ema_slow_len = 20;
    int fast_len = (PERIOD_D1/Period()) * d1_ema_fast_len;
    int slow_len = (PERIOD_D1/Period()) * d1_ema_slow_len;
-   //log("Current TF:"+Period()+", EMA_FAST:"+fast_len+", EMA_SLOW:"+slow_len);
-   // Args 3-5: Period, Shift, Method
    double ema1 = iCustom(NULL,0,"Custom Moving Averages", fast_len, 0, MODE_EMA,0,0); 
    double ema2 = iCustom(NULL,0,"Custom Moving Averages", slow_len, 0, MODE_EMA,0,0);
    bool uptrend = ema1>ema2 ? true : false;
    bool downtrend = ema1<ema2 ? true : false;
+   
+   /*double  iADX(
+   string       symbol,        // symbol
+   int          timeframe,     // timeframe
+   int          period,        // averaging period
+   int          applied_price, // applied price
+   int          mode,          // line index
+   int          shift          // shift
+   );*/
    
    bool golong = sos_trig && fos_trig && uptrend ? true : false;
    bool goshort = sob_trig && fob_trig && downtrend ? true : false;
@@ -292,22 +304,16 @@ int GenerateSignal() {
 //| Close/hold position.
 //| Returns: 1 for close short, -1 for close long, 0 for hold.
 //+----------------------------------------------------------------------------+
-int UpdatePosition() {      
-   double storsi = iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      0,0);
-   double storsi_prev = iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      0,1);
-   double stosig_prev = iCustom(NULL,0,"StochRSI",
-      //RSILen,KLen,DLen,Slowing,StochOB,StochOS,
-      1,2+1);
+int GetExitSignal() {      
+   double storsi = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,0);
+   double storsi_prev = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,1);
+   double stosig_prev = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2+1);
    
    // Close short when StochRSI moves above Overbought line
-   if(OrderType()==OP_SELL && storsi_prev<=StochOS && storsi>StochOS)
+   if(OrderType()==OP_SELL && storsi_prev<=_StochOS && storsi>_StochOS)
       return 1;
    // Close long when StochRSI moves below Oversold line
-   else if(OrderType()==OP_BUY && storsi_prev>=StochOB && storsi<StochOB)
+   else if(OrderType()==OP_BUY && storsi_prev>=_StochOB && storsi<_StochOB)
       return -1;
    else
       return 0;     
