@@ -20,7 +20,10 @@ sinput int MidTermLen         =10;
 sinput int LongTermLen        =10;
 sinput int MinImpulseStdDevs  =3;
 
-//---  Structs
+//--- Buffers
+double MktStructBuf[];
+
+//--- Structs
 struct impulse {
    // Price swing properties
    int direction;    // 1:up, -1:down, 0:none
@@ -34,13 +37,10 @@ struct impulse {
    double n_deviations;
 };
 
-//--- Buffers
-double MktStructBuf[];
-
 //--- Globals
+string ChartObjs[];
 datetime swinglows[];
 datetime swinghighs[];
-string ObjectList[];
 impulse impulses[];  // Non-TS (left-to-right)
 
 //--- Global constants
@@ -58,14 +58,15 @@ const int SEC_PER_DAY      = 86400;
 //| Custom indicator initialization function                                  |
 //+---------------------------------------------------------------------------+
 int OnInit() {
-   if(initHasRun)
-      return(0);
+   //if(initHasRun)
+   //   return(0);
+   ObjectsDeleteAll();
       
    //--- indicator buffers mapping
    IndicatorBuffers(1);
    IndicatorShortName(mainLbl);
    IndicatorDigits(1);
-   
+    
    SetIndexLabel(0,mktStructLbl);
    SetIndexStyle(0,DRAW_LINE,STYLE_SOLID,2, clrBlue);
    SetIndexBuffer(0, MktStructBuf);
@@ -87,7 +88,7 @@ int OnInit() {
    ArrayResize(MktStructBuf,1);
    
    log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT));
-   
+    
    log("********** ICT Initialized **********");
    initHasRun=true;
    return(INIT_SUCCEEDED);
@@ -98,11 +99,11 @@ int OnInit() {
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    
-   /*for(int i=0; i<ArraySize(ObjectList); i++) {
-      int r=ObjectDelete(ObjectList[i]);
-      log("deleted object "+(string)ObjectList[i]+", result:"+(string)r+", Desc:"+GetLastError());
+   /*for(int i=0; i<ArraySize(ChartObjs); i++) {
+      int r=ObjectDelete(ChartObjs[i]);
+      log("deleted object "+(string)ChartObjs[i]+", result:"+(string)r+", Desc:"+GetLastError());
    }*/
-   ObjectsDeleteAll();
+   //ObjectsDeleteAll();
    log("********** ICT De-initialized **********");
    return;
 }
@@ -211,7 +212,7 @@ void UpdateDailySwings(int iBar) {
    TimeToStruct(Time[iBar], dt1);
    
    if(dt1.hour == 18 && dt1.min == 0) {
-      CreateVLine(iBar+1, ObjectList);   
+      CreateVLine(iBar+1, ChartObjs);   
       TimeToStruct(Time[iBar], dt2);
       dt2.day-=1;
       int dailybars = Bars(Symbol(),0, Time[iBar],StructToTime(dt2));
@@ -219,18 +220,18 @@ void UpdateDailySwings(int iBar) {
       int iLBar = iLowest(Symbol(), 0, MODE_LOW, dailybars, iBar);
       int iHBar = iHighest(Symbol(), 0, MODE_HIGH, dailybars, iBar);
       
-      CreateLine("daily_low_"+iBar, Time[iBar], Low[iLBar], StructToTime(dt2),
-         Low[iLBar], clrRed, ObjectList);         
-      CreateLine("daily_high_"+iBar, Time[iBar], High[iHBar], StructToTime(dt2),
-         High[iHBar], clrRed, ObjectList);
+      CreateLine("daily_low_"+(string)iBar, Time[iBar], Low[iLBar], StructToTime(dt2),
+         Low[iLBar], clrRed, ChartObjs);         
+      CreateLine("daily_high_"+(string)iBar, Time[iBar], High[iHBar], StructToTime(dt2),
+         High[iHBar], clrRed, ChartObjs);
       
       // Identify significant daily swings 
       if(isSwingLow(iLBar, Low)) {
-         CreateArrow("swinglow_"+iLBar, Symbol(), OBJ_ARROW_UP, iLBar, clrBlue, ObjectList);
+         CreateText("SL",iLBar,ANCHOR_UPPER,ChartObjs);
          appendDtArray(swinglows, Time[iLBar]);
       }
       if(isSwingHigh(iHBar,High)) {
-         CreateArrow("swinghigh_"+iHBar, Symbol(), OBJ_ARROW_DOWN, iHBar, clrBlue, ObjectList);
+         CreateText("SH",iHBar,ANCHOR_LOWER,ChartObjs);
          appendDtArray(swinglows, Time[iHBar]);
       }
    }
@@ -240,9 +241,7 @@ void UpdateDailySwings(int iBar) {
 //| 
 //+---------------------------------------------------------------------------+
 void UpdateImpulseMoves(int iBar, int period) {
- 
    impulse moves[];
- 
    double point=MarketInfo(Symbol(),MODE_POINT);
    
    for(int i=iBar; i<iBar+period; i++) {
@@ -272,7 +271,7 @@ void UpdateImpulseMoves(int iBar, int period) {
       // New impulse extends move by 1 bar to the left.
       // Extend startdt, start_ibar, and height
       if(last.direction == dir) {
-         log("Found an impulse chain!");
+         //log("Found an impulse chain!");
          last.height+=(Close[i]-Open[i])/point;
          last.start_ibar=i;
          last.chainlen++;
@@ -296,9 +295,6 @@ void UpdateImpulseMoves(int iBar, int period) {
       }
    }
    
-   
-   
-
    double heights[];
    ArrayResize(heights,ArraySize(moves));
    for(int i=0; i<ArraySize(moves); i++) {
@@ -318,7 +314,7 @@ void UpdateImpulseMoves(int iBar, int period) {
       }     
    }
    
-   log("Updated impulses from iBar "+iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(impulses));
+   log("Updated impulses from iBar "+(string)iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(impulses));
    
    int max_up=0, max_down=0;
    for(int i=1; i<ArraySize(impulses); i++) {      
@@ -337,12 +333,26 @@ void UpdateImpulseMoves(int iBar, int period) {
       impulses[max_down].ob_ibar=impulses[max_down].start_ibar+1;
    
    log("Mean chain height:"+DoubleToStr(mean_height,2)+" pips, Std_Dev:"+DoubleToStr(std,2)+" pips");
+   
+   // Draw OB Rectangles
+   
+   int OB_RECT_WIDTH=50;
+   datetime dt1=iTime(Symbol(),0,impulses[max_up].ob_ibar);
+   double p1=iHigh(Symbol(),0,impulses[max_up].ob_ibar);
+   datetime dt2;
+   if(impulses[max_up].ob_ibar-OB_RECT_WIDTH < 0)
+      dt2=iTime(Symbol(),0,0);
+   else
+      dt2=iTime(Symbol(),0,impulses[max_up].ob_ibar-OB_RECT_WIDTH);
+   double p2=iLow(Symbol(),0,impulses[max_up].ob_ibar);
+   CreateRect(dt1,p1,dt2,p2,ChartObjs);
+   
    log(impulseToStr(impulses[max_up], std));
    log(impulseToStr(impulses[max_down], std));
  
 }
 
-//+---------------------------------------------------------------------------+
+//+----------------+-----------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
 string impulseToStr(impulse& x, double std) {

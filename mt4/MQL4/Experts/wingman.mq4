@@ -1,41 +1,44 @@
 //+------------------------------------------------------------------+
-//|                                                  crackerjack.mq4 |
-//|                           Copyright 2018, Crackajack Enterprises |
-//|                                       https://www.crackajack.com |
+//|                                                      wingman.mq4 |
+//|                                 Copyright 2018, Wing Enterprises |
+//|                                         https://www.wingcorp.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2018, Crackajack Enterprises"
-#property link      "https://www.cracka.com"
+#include <utility.mqh>
+#property copyright "Copyright 2018, Wing Enterprises"
+#property link      "https://www.wingcorp.com"
 #property version   "1.00"
 #property strict
 #define MAGICMA  20131111
 
 //--- Inputs
-input int    RSILen           = 10;
-input int    KLen             = 10;
-input int    DLen             = 2;
-input int    Slowing          = 2;
-input int    StochOB          = 91;
-input int    StochOS          = 11;
-input double Lots             = 0.1;
-input int    TakeProfit       = 75;   
-input int    StopLoss         = 25;
-input int    ADXPeriod        = 14;
-input int    ADXRangeLvl      = 25;
+input int    _RSILen          = 10;
+input int    _KLen            = 10;
+input int    _DLen            = 2;
+input int    _Slowing         = 2;
+input int    _StochOB         = 91;
+input int    _StochOS         = 11;
+input int    _FishLen         = 10;         
+input double _FishBands       = 1.0;        
 
-#include <utility.mqh>
+// Number of bars to include in calculation
+// Absolute value of upper and lower bands
 
+double Lots             = 1.0;
+int    TakeProfit       = 75;   
+int    StopLoss         = 25;
 
 //--- Globals
-string indicator_name="Crackajack";
 int nTrades=0;
 int nPositions=0;
 int nStops=0;
 int nTakeProfit=0;
+string ntrades_lbl = "trades";
+string npos_lbl = "positions";
+string OrderTypes[6] = {"BUY", "SELL", "BUYLIMIT", "BUYSTOP", "SELLLIMIT", "SELLSTOP"};
 int SLOrders[];
 int TPOrders[];
 int Orders[];
 string ObjList[];
-string OrderTypes[6] = {"BUY", "SELL", "BUYLIMIT", "BUYSTOP", "SELLLIMIT", "SELLSTOP"};
 
 double GetLots() {return Lots;}
 int CalculateCurrentOrders(string symbol) {return 1;}
@@ -44,23 +47,25 @@ int CalculateCurrentOrders(string symbol) {return 1;}
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 int OnInit() {
-   ObjectCreate(0,"trades",OBJ_LABEL,0,0,0);
-   ObjectSetString(0,"trades",OBJPROP_TEXT,"Trades: 0");
-   ObjectSetInteger(0,"trades",OBJPROP_XDISTANCE,5);
-   ObjectSetInteger(0,"trades",OBJPROP_YDISTANCE,50);
-   ObjectSetInteger(0,"trades",OBJPROP_COLOR,clrBlack);
+   string text = "Wingman!";
+
+   ObjectCreate(0,ntrades_lbl,OBJ_LABEL,0,0,0);
+   ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades: 0");
+   ObjectSetInteger(0,ntrades_lbl,OBJPROP_XDISTANCE,5);
+   ObjectSetInteger(0,ntrades_lbl,OBJPROP_YDISTANCE,50);
+   ObjectSetInteger(0,ntrades_lbl,OBJPROP_COLOR,clrBlack);
    
-   ObjectCreate(0,"positions",OBJ_LABEL,0,0,0);
-   ObjectSetString(0,"positions",OBJPROP_TEXT,"Positions: 0");
-   ObjectSetInteger(0,"positions",OBJPROP_XDISTANCE,5);
-   ObjectSetInteger(0,"positions",OBJPROP_YDISTANCE,75);
-   ObjectSetInteger(0,"positions",OBJPROP_COLOR,clrBlack);
+   ObjectCreate(0,npos_lbl,OBJ_LABEL,0,0,0);
+   ObjectSetString(0,npos_lbl,OBJPROP_TEXT,"Positions: 0");
+   ObjectSetInteger(0,npos_lbl,OBJPROP_XDISTANCE,5);
+   ObjectSetInteger(0,npos_lbl,OBJPROP_YDISTANCE,75);
+   ObjectSetInteger(0,npos_lbl,OBJPROP_COLOR,clrBlack);
    
    ArrayResize(SLOrders,1);
    ArrayResize(TPOrders,1);
    ArrayResize(Orders,1);
    
-   log("********** Crackajack Initialized **********");
+   log("********** Wingman Initialized **********");
    return(INIT_SUCCEEDED);
 }
 
@@ -68,12 +73,12 @@ int OnInit() {
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 void OnDeinit(const int reason) {
-   log("Crackajack Deinit. ObjList.size:"+(string)ArraySize(ObjList)+", IsTesting:"+(string)IsTesting());
+   log("Wingman Deinit. ObjList.size:"+(string)ArraySize(ObjList)+", IsTesting:"+IsTesting());
    log("ObjList:"+strArrayToStr(ObjList));
    
    if(!IsTesting()) {
-      ObjectDelete("trades"); 
-      ObjectDelete("positions"); 
+      ObjectDelete(ntrades_lbl); 
+      ObjectDelete(npos_lbl); 
       ObjectsDeleteAll();
    }
 }
@@ -82,60 +87,32 @@ void OnDeinit(const int reason) {
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
 double OnTester() {
-   log("********** Crackajack Test Complete **********");
+   log("********** Wingman Test Complete **********");
    log("********** Test Summary **********");
    log((string)nTrades+" total trades made.");
    log((string)nPositions+" positions open.");
    log((string)nStops+" orders hit StopLoss.");
    log((string)nTakeProfit+" orders hit TakeProfit.");
-   log("***********Debug Info ************************");
-   //listAllIndicators();
-   //listAllIndicators(); 
-   log("*********************************************");
+   log("*******************************************");
+   log("Orders: "+intArrayToStr(Orders));
+   log("SLOrders: "+intArrayToStr(SLOrders));
+   log("TPOrders: "+intArrayToStr(TPOrders));
    return 0.0;
 }
 
 //+---------------------------------------------------------------------------+
 //| MT4 Event Handler
 //+---------------------------------------------------------------------------+
-void listAllIndicators() {
-   long chart_id=ChartFirst();
-   while(chart_id != -1) {
-      long n_subwindows = ChartGetInteger(chart_id,CHART_WINDOWS_TOTAL,0);
-      for(int win_idx=0; win_idx<n_subwindows; win_idx++) {
-         int n_indicators = ChartIndicatorsTotal(chart_id, win_idx);
-         for(int ind_idx=0; ind_idx<n_indicators; ind_idx++) {
-            string ind_name = ChartIndicatorName(chart_id, win_idx, ind_idx);
-            log("Chart:"+(string)chart_id+", Window:"+(string)win_idx+", Indicator:"+(string)ind_idx+", Name:"+ind_name);
-            
-            ResetLastError();
-            if(win_idx==3)
-               ChartIndicatorDelete(chart_id, 3, ind_name);
-            
-            // Rename to unique name
-            if(StringFind("ADX", ind_name)) {
-               bool ss_res=IndicatorSetString(INDICATOR_SHORTNAME,"ADX "+(string)ind_idx);
-               IndicatorShortName("ADX "+(string)ind_idx);
-               bool si_res=IndicatorSetInteger(INDICATOR_LEVELCOLOR,0,clrRed);  // arg 2: level to change
-               log("ss_res:"+(string)ss_res+", si_res:"+(string)si_res+", Details:"+err_msg());
-            }
-         }
-      }
-      chart_id=ChartNext(chart_id);
-   }
-   ChartRedraw(chart_id);
-}
-
-//+---------------------------------------------------------------------------+
-//| MT4 Event Handler
-//+---------------------------------------------------------------------------+
 void OnTick() {
-   //if(!NewBar())
-   //   return;
+   if(!NewBar())
+      return;
       
    CheckClosedOrders();
    UpdateOpenPendingOrders();   
    CreateNewOrders();
+
+   ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades:"+(string)nTrades);
+   ObjectSetString(0,npos_lbl,OBJPROP_TEXT,"Positions:"+(string)nPositions);
    return;
 }
 
@@ -189,12 +166,9 @@ void CheckClosedOrders() {
 //|
 //+---------------------------------------------------------------------------+
 void UpdateOpenPendingOrders() {
-   
-   int res;
-   bool close_position;
+   int res, action;
    
    for(int i=0; i<OrdersTotal(); i++) {
-      close_position=false;
       // Load next open/pending order
       bool is_selected = OrderSelect(i, SELECT_BY_POS, MODE_TRADES);      
       if(!is_selected) {
@@ -204,16 +178,15 @@ void UpdateOpenPendingOrders() {
       if(OrderSymbol()!=Symbol() || OrderMagicNumber()!=MAGICMA)
          continue;
          
-      close_position = GetExitSignal(OrderType());
+      action = GetExitSignal();
       
-      if(close_position==false)
+      if(action==0)
          continue;
-      
-      if(close_position == true && OrderType()==OP_SELL) {
+      else if(action == 1) {
          res=OrderClose(OrderTicket(), OrderLots(), Ask, 3, clrBlue);
          CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_UP,0,clrRed, ObjList);
       }
-      else if(close_position == true && OrderType()==OP_BUY) {
+      else if(action == -1) {
          res=OrderClose(OrderTicket(), OrderLots(), Bid, 3, clrRed);
          CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_DOWN,0, clrBlue, ObjList);
       }
@@ -221,7 +194,8 @@ void UpdateOpenPendingOrders() {
       if(res != 1)
          log("Error closing order "+(string)OrderTicket()+", Reason: "+err_msg());
       else {
-         log("Closed "+OrderTypes[OrderType()]+" order #"+(string)OrderTicket());
+         log("Closed "+OrderTypes[OrderType()]+" order #"+(string)OrderTicket()+
+            ", Reason: StochRSI reset.");
          nTrades++;
          nPositions--;
       }
@@ -232,16 +206,13 @@ void UpdateOpenPendingOrders() {
 //| Evaluate new positions
 //+---------------------------------------------------------------------------+
 void CreateNewOrders() {
-   if(!NewBar())
-      return;
-   
    int oid, type;
    double TP=0.0, SL=0.0, price=0.0;
    int signal = GetEntrySignal();
    
    if(signal==0) {
-      //ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades:"+(string)nTrades);
-      //ObjectSetString(0,npos_lbl,OBJPROP_TEXT,"Positions:"+(string)nPositions);
+      ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades:"+(string)nTrades);
+      ObjectSetString(0,npos_lbl,OBJPROP_TEXT,"Positions:"+(string)nPositions);
       return;
    }
    else if(signal==1){  // Buy   
@@ -251,6 +222,7 @@ void CreateNewOrders() {
       SL = Bid - StopLoss*Point*10;
       oid = OrderSend(Symbol(),type,GetLots(),Ask,3,SL,TP,"",MAGICMA,0,clrBlue);
       CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_UP, 0, clrBlue, ObjList);
+      log("ObjList.size:"+(string)ArraySize(ObjList));
    }
    else if(signal==-1){  // Sell
       type=OP_SELL;
@@ -277,50 +249,47 @@ void CreateNewOrders() {
 }
   
 
+
 //+----------------------------------------------------------------------------+
+//| Look for confluence between Stochastic RSI oversold/overbought conditions
+//| and Fisher Transform in extreme range.
 //| Returns value: 1 for buy signal, -1 for sell signal, 0 otherwise
 //+----------------------------------------------------------------------------+
 int GetEntrySignal() {      
    
-   /***** Determine Trend *****/
-   double adx_low[2], adx_high[2];
+   /***** Primary signals *****/
    
-   double adx_main=iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_MAIN,0);
-   adx_high[0] = iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_PLUSDI,1);
-   adx_high[1] = iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_PLUSDI,2);
-   adx_low[0]= iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_MINUSDI,1);
-   adx_low[1] = iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_MINUSDI,2);
-      
-   bool crossover = adx_high[0] > adx_low[0] && adx_high[1] <= adx_low[1] ? true : false;
-   bool crossunder = adx_high[0] < adx_low[0] && adx_high[1] >= adx_low[1] ? true : false;
+   double s1=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,0);
+   double s1_prev=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,1);
+   double s2=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2);
+   double s2_prev=iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2+1);
+   bool sob_trig=s2<_StochOB && s2_prev>=_StochOB && s2<s1 ? true : false;
+   bool sos_trig=s2>_StochOS && s2_prev<=_StochOS && s2>s1 ? true : false;           
+   double f1=iCustom(Symbol(),0,"FisherTransform",_FishLen,_FishBands,0,0);
+   double f2=iCustom(Symbol(),0,"FisherTransform",_FishLen,_FishBands,1,0);
+   bool fob_trig=f1>_FishBands && f2>_FishBands ? true : false;
+   bool fos_trig=f1<_FishBands*-1 && f2<_FishBands*-1 ? true : false;
    
-   if(crossover==true && adx_high[0] >= ADXRangeLvl) {
-      log("ADX("+(string)ADXPeriod+") crossover! -DI[1]:"+DoubleToStr(adx_low[0],2)+", -DI[2]:"+DoubleToStr(adx_low[1],2)+
-          ", +DI[1]:"+DoubleToStr(adx_high[0],2)+", +DI[2]:"+DoubleToStr(adx_high[1],2));
-      return 1;   
-   }
-   else if(crossunder==true && adx_low[0] >= ADXRangeLvl) {
-      log("ADX("+(string)ADXPeriod+") crossunder! -DI[1]:"+DoubleToStr(adx_low[0],2)+", -DI[2]:"+DoubleToStr(adx_low[1],2)+
-          ", +DI[1]:"+DoubleToStr(adx_high[0],2)+", +DI[2]:"+DoubleToStr(adx_high[1],2));
-      return -1;
-   }
-   else
-      return 0;
+   /***** HTF Trend Confluence *****/
    
-   /* Use WindowFind(string name) to get the indexes of the newly drawn indicators to adjust properties */
+   int d1_ema_fast_len = 10;
+   int d1_ema_slow_len = 20;
+   int fast_len = (PERIOD_D1/Period()) * d1_ema_fast_len;
+   int slow_len = (PERIOD_D1/Period()) * d1_ema_slow_len;
+   double ema1 = iCustom(NULL,0,"Custom Moving Averages", fast_len, 0, MODE_EMA,0,0); 
+   double ema2 = iCustom(NULL,0,"Custom Moving Averages", slow_len, 0, MODE_EMA,0,0);
+   bool uptrend = ema1>ema2 ? true : false;
+   bool downtrend = ema1<ema2 ? true : false;
    
-  
+   /*double  iADX(
+   string       symbol,        // symbol
+   int          timeframe,     // timeframe
+   int          period,        // averaging period
+   int          applied_price, // applied price
+   int          mode,          // line index
+   int          shift          // shift
+   );*/
    
-   /***** Look for Trigger Signal *****/
-   /*
-   double s1=iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,0,0);
-   double s1_prev=iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,0,1);
-   double s2=iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,1,2);
-   double s2_prev=iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,1,2+1);
-   
-   bool ob=s2<StochOB && s2_prev>=StochOB && s2<s1 ? true : false;
-   bool os=s2>StochOS && s2_prev<=StochOS && s2>s1 ? true : false;           
-
    bool golong = sos_trig && fos_trig && uptrend ? true : false;
    bool goshort = sob_trig && fob_trig && downtrend ? true : false;
    
@@ -329,48 +298,25 @@ int GetEntrySignal() {
          ", EMA1:"+DoubleToStr(ema1,2)+", EMA2:"+DoubleToStr(ema2,2));
    }
    return golong ? 1 : goshort ? -1 : 0;
-   */
 }
 
 //+----------------------------------------------------------------------------+
 //| Close/hold position.
 //| Returns: 1 for close short, -1 for close long, 0 for hold.
 //+----------------------------------------------------------------------------+
-bool GetExitSignal(int ordertype) {  
- /***** Determine Trend *****/
-  
-   if(ordertype==OP_BUY) {
-      double adxplus = iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_PLUSDI,1);
-      if(adxplus <=ADXRangeLvl) {
-         log("+DI trend died. Close long.");
-         return true;
-      }
-   }
-    
-   if(ordertype==OP_SELL) {
-      double adxminus = iADX(Symbol(),0,ADXPeriod,PRICE_CLOSE,MODE_MINUSDI,1);
-      if(adxminus <=ADXRangeLvl) {
-         log("-DI trend died. Close short.");
-         return true;
-      }
-   }
-   
-   return false;
-      
-   /*       
-   double storsi = iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,0,0);
-   double storsi_prev = iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,0,1);
-   double stosig_prev = iCustom(Symbol(),0,"StochRSI",RSILen,KLen,DLen,Slowing,StochOB,StochOS,1,2+1);
+int GetExitSignal() {      
+   double storsi = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,0);
+   double storsi_prev = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,0,1);
+   double stosig_prev = iCustom(Symbol(),0,"StochRSI",_RSILen,_KLen,_DLen,_Slowing,_StochOB,_StochOS,1,2+1);
    
    // Close short when StochRSI moves above Overbought line
-   if(OrderType()==OP_SELL && storsi_prev<=StochOS && storsi>StochOS)
+   if(OrderType()==OP_SELL && storsi_prev<=_StochOS && storsi>_StochOS)
       return 1;
    // Close long when StochRSI moves below Oversold line
-   else if(OrderType()==OP_BUY && storsi_prev>=StochOB && storsi<StochOB)
+   else if(OrderType()==OP_BUY && storsi_prev>=_StochOB && storsi<_StochOB)
       return -1;
    else
       return 0;     
-   */
 }
 
 //+-----------------------------------------------------------------------------+
