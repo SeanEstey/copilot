@@ -1,12 +1,9 @@
 //+---------------------------------------------------------------------------+
-//|                                                          ICT.mq4 |
-//|                                 Copyright 2018, Butch the Outlaw |
-//|                                      https://www.outlawbutch.com |
+//|                                                                   ICT.mq4 |
+//|                                                Copyright 2018, Sean Estey |      
 //+---------------------------------------------------------------------------+
 
-
-#property copyright "Copyright 2018, Butch the Outlaw"
-#property link      "https://www.outlawbutch.com"
+#property copyright "Copyright 2018, Sean Estey"
 #property version   "1.00"
 #property strict
 #property indicator_chart_window
@@ -25,17 +22,10 @@ sinput int MinImpulseStdDevs  =3;
 #include <FX/PriceAction.mqh>
 #include <FX/ChartObjects.mqh>
 
-
 //--- Buffers
 double MktStructBuf[];
 
-//--- Data Structures
-
-
-
-
 //--- Globals
-
 string ChartObjs[];
 datetime SwingLows[];
 datetime SwingHighs[];
@@ -84,8 +74,7 @@ int OnInit() {
    
    ArrayResize(MktStructBuf,1);
    
-   log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT));
-    
+   log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT)); 
    log("********** ICT Initialized **********");
    initHasRun=true;
    return(INIT_SUCCEEDED);
@@ -120,14 +109,13 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {   
-   int iBar;   // TimeSeries
-  
    ArraySetAsSeries(time,true);
    ArraySetAsSeries(open,true);
    ArraySetAsSeries(high,true);
    ArraySetAsSeries(low,true);
    ArraySetAsSeries(close,true);
    
+   int iBar;   // TimeSeries
    if(prev_calculated==0) {
       iBar = 0;
       ArrayInitialize(MktStructBuf, EMPTY_VALUE);
@@ -142,45 +130,12 @@ int OnCalculate(const int rates_total,
  
    // Identify/annotate key daily swings
    for(int i=0; i<rates_total; i++){
-      UpdateDailySwings(iBar);
+      FindSwings(iBar);
       MktStructBuf[iBar] = 0;
       iBar++;
    }
  
-   UpdateImpulseMoves(iBar-rates_total,300);
+   FindImpulses(iBar-rates_total,300);
    log("Price:"+ToPipsStr(close[10]-Close[0])+" pips, Bar "+iBar);
-   
-   
-   return(rates_total);
-   
- 
-   
+   return(rates_total);  
 }
-
-
-//+---------------------------------------------------------------------------+
-//| Timer function                                                            |
-//+---------------------------------------------------------------------------+
-void OnTimer(){
-   //log("Timer callback");
-   //log("tracking "+(string)ArraySize(SwingHighs)+" SwingHighs.");
-}
-
-
-//+---------------------------------------------------------------------------+
-//| ChartEvent function                                                       |
-//+---------------------------------------------------------------------------+
-void OnChartEvent(const int id,
-                  const long &lparam,
-                  const double &dparam,
-                  const string &sparam){
-}
-
-
-//+---------------------------------------------------------------------------+
-// ************************ Price Action / ICT Methods ***********************/
-//+---------------------------------------------------------------------------+
-
-
-
-
