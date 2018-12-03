@@ -15,6 +15,7 @@ MQL4/Include/Files/*
 MQL4/Include/Indicators/*
 MQL4/Include/Strings/*
 MQL4/Include/Tools/*
+MQL4/Indicators/*
 MQL4/Indicators/*.ex4
 MQL4/Experts/*.ex4
 MQL4/Libraries/*
