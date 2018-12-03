@@ -221,6 +221,7 @@ void CreateNewOrders() {
       TP = Bid + TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
       SL = Bid - StopLoss*Point*10;
       oid = OrderSend(Symbol(),type,GetLots(),Ask,3,SL,TP,"",MAGICMA,0,clrBlue);
+      
       CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_UP, 0, clrBlue, ObjList);
       log("ObjList.size:"+(string)ArraySize(ObjList));
    }
@@ -229,6 +230,7 @@ void CreateNewOrders() {
       price = Ask;
       TP = Ask - TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
       SL = Ask + StopLoss*Point*10;
+      
       oid = OrderSend(Symbol(),type,GetLots(),Bid,3,SL,TP,"",MAGICMA,0,clrRed);
       CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_DOWN, 0, clrRed, ObjList);
    }
