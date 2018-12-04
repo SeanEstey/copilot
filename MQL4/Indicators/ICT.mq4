@@ -2,7 +2,6 @@
 //|                                                                   ICT.mq4 |
 //|                                                Copyright 2018, Sean Estey |      
 //+---------------------------------------------------------------------------+
-
 #property copyright "Copyright 2018, Sean Estey"
 #property version   "1.00"
 #property strict
@@ -12,9 +11,6 @@
 #property indicator_color1 Black
 
 //---- Input params
-sinput int ShortTermLen       =24;
-sinput int MidTermLen         =10;
-sinput int LongTermLen        =10;
 sinput int MinImpulseStdDevs  =3;
 
 #include <FX/Logging.mqh>
@@ -26,11 +22,12 @@ sinput int MinImpulseStdDevs  =3;
 double MktStructBuf[];
 
 //--- Globals
-string ChartObjs[];
-datetime SwingLows[];
-datetime SwingHighs[];
-OrderBlock OrderBlocks[];
-Impulse Impulses[];           // Non-TimeSeries (left-to-right)
+string ChartObjs[1];
+Candle* SwingLows[1];
+Candle* SwingHighs[1];
+Impulse* Impulses[1];          
+OrderBlock* OrderBlocks[1];
+
 
 //--- Global constants
 bool initHasRun            = false;
@@ -47,13 +44,17 @@ const int SEC_PER_DAY      = 86400;
 //| Custom indicator initialization function                                  |
 //+---------------------------------------------------------------------------+
 int OnInit() {
-   ObjectsDeleteAll();
-      
+   ObjectsDeleteAll();   
+  
+   MqlDateTime mdt;
+   TimeToStruct(TimeGMT(),mdt);
+   log("Day of the week: "+(string)mdt.day_of_week+", hour: "+(string)mdt.hour+"(GMT+0)");
+  
    //--- indicator buffers mapping
    IndicatorBuffers(1);
    IndicatorShortName(mainLbl);
    IndicatorDigits(1);
-    
+     
    SetIndexLabel(0,mktStructLbl);
    SetIndexStyle(0,DRAW_LINE,STYLE_SOLID,2, clrBlue);
    SetIndexBuffer(0, MktStructBuf);
@@ -74,7 +75,7 @@ int OnInit() {
    
    ArrayResize(MktStructBuf,1);
    
-   log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT)); 
+   //log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT)); 
    log("********** ICT Initialized **********");
    initHasRun=true;
    return(INIT_SUCCEEDED);
@@ -84,6 +85,22 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
+   
+   for(int i=0; i<ArraySize(Impulses); i++) {
+      delete(Impulses[i]);
+   }
+   for(int i=0; i<ArraySize(SwingLows); i++) {
+      delete(SwingLows[i]);
+   }
+   for(int i=0; i<ArraySize(SwingHighs); i++) {
+      delete(SwingHighs[i]);
+   }
+   for(int i=0; i<ArraySize(OrderBlocks); i++) {
+      delete(OrderBlocks[i]);
+   }
+   for(int i=0; i<ArraySize(ChartObjs); i++) {
+      //ObjectDelete(ChartObjs[i]);
+   }
    
    /*for(int i=0; i<ArraySize(ChartObjs); i++) {
       int r=ObjectDelete(ChartObjs[i]);
@@ -119,8 +136,6 @@ int OnCalculate(const int rates_total,
    if(prev_calculated==0) {
       iBar = 0;
       ArrayInitialize(MktStructBuf, EMPTY_VALUE);
-      ArrayInitialize(SwingHighs, EMPTY_VALUE);
-      ArrayInitialize(SwingLows, EMPTY_VALUE);
    }
    else {
       iBar = prev_calculated+1;
@@ -130,12 +145,19 @@ int OnCalculate(const int rates_total,
  
    // Identify/annotate key daily swings
    for(int i=0; i<rates_total; i++){
-      FindSwings(iBar);
+      FindSwings(iBar, SwingLows, SwingHighs);
       MktStructBuf[iBar] = 0;
       iBar++;
    }
- 
-   FindImpulses(iBar-rates_total,300);
+   
+   FindImpulses(iBar-rates_total,300, Impulses);
+   //FindOrderBlocks(3.0, Impulses, OrderBlocks);
+   
+   log("Found "+(string)ArraySize(SwingHighs)+" SwingHighs and "+(string)ArraySize(SwingLows)+" SwingLows.");
+   log("Found "+(string)ArraySize(Impulses)+" impulses!");   
    log("Price:"+ToPipsStr(close[10]-Close[0])+" pips, Bar "+iBar);
    return(rates_total);  
 }
+
+
+   
