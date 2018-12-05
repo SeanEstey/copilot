@@ -23,11 +23,11 @@ sinput int MinImpulseStdDevs  =3;
 double MainBuf[];
 
 //--- Dynamic arrays for tracking objects allocated on heap
-string ChartObjs[1];
-Candle* SwingLows[1];
-Candle* SwingHighs[1];
-Impulse* Impulses[1];          
-OrderBlock* OrderBlocks[1];
+string ChartObjs[];
+Candle* SwingLows[];
+Candle* SwingHighs[];
+Impulse* Impulses[];          
+OrderBlock* OrderBlocks[];
 
 //--- Global constants
 string MainBufName             = "signal";
@@ -39,7 +39,7 @@ string SwingLowLblName         = "swing_lows";
 //+---------------------------------------------------------------------------+
 //| Custom indicator initialization function                                  |
 //+---------------------------------------------------------------------------+
-int OnInit() {
+int OnInit() { 
    ObjectsDeleteAll();   
    IndicatorBuffers(1);
    IndicatorShortName("ICT");
@@ -49,8 +49,8 @@ int OnInit() {
    SetIndexBuffer(0, MainBuf);
    ArraySetAsSeries(MainBuf,true);
    SetIndexDrawBegin(0,1);
-   CreateLabel("Last Impulse:",ImpulseLblName, 5,50);
-   CreateLabel("Last Retrace:",RetraceLblName, 5,75);
+   CreateLabel("",SwingHighLblName, 5,50);
+   CreateLabel("",SwingLowLblName, 5,90);
    log("********** ICT Initialized **********");
    return(INIT_SUCCEEDED);
 }
@@ -118,28 +118,27 @@ int OnCalculate(const int rates_total,
  
    // Identify/annotate key daily swings
    for(int i=0; i<rates_total; i++){
-     // FindDailyLevels(iBar, low, high, SwingLows, SwingHighs);
-      //FindSwings(iBar, SwingLows, SwingHighs);
       MainBuf[iBar] = 0;
       iBar++;
    }
    
+   // Draw annotations
+   DrawSwingLabels(Symbol(), 0, 0, 100, clrBlack, low, high, SwingLows, SwingHighs, ChartObjs);
    DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
    DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
    DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
    
-   FindImpulses(iBar-rates_total,300, Impulses);
-   //FindOrderBlocks(3.0, Impulses, OrderBlocks);
+   // DEBUGGING CODE. THROW AWAY.
+   int hh_shift=GetSignificantVisibleSwing(SWING_HIGH, SwingHighs);
+   ObjectSetString(0,SwingHighLblName,OBJPROP_TEXT,
+      "Highest Visible SH: "+(string)high[hh_shift]+" ("+TimeToStr(time[hh_shift])+")"); 
+   int ll_shift=GetSignificantVisibleSwing(SWING_LOW, SwingLows);
+   ObjectSetString(0,SwingLowLblName,OBJPROP_TEXT,
+      "Lowest Visible SL: "+(string)low[ll_shift]+" ("+TimeToStr(time[ll_shift])+")"); 
+   
    
    log("Found "+(string)ArraySize(SwingHighs)+" SwingHighs and "+(string)ArraySize(SwingLows)+" SwingLows.");
-   log("Found "+(string)ArraySize(Impulses)+" impulses!");   
-   log("Price:"+(string)ToPipsStr(close[10]-Close[0])+" pips, Bar "+(string)iBar);
-   
-   log(Impulses[ArraySize(Impulses)-1].ToString());
-   log(Impulses[ArraySize(Impulses)-2].ToString());
-   log(Impulses[ArraySize(Impulses)-3].ToString());
-   log(Impulses[ArraySize(Impulses)-4].ToString());
-   log(Impulses[ArraySize(Impulses)-5].ToString());
+   //log("Found "+(string)ArraySize(Impulses)+" impulses!");   
    return(rates_total);  
 }
 
