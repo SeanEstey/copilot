@@ -16,68 +16,42 @@ sinput int MinImpulseStdDevs  =3;
 #include <FX/Logging.mqh>
 #include <FX/Utility.mqh>
 #include <FX/PriceAction.mqh>
+#include <FX/PriceMovement.mqh>
 #include <FX/ChartObjects.mqh>
 
 //--- Buffers
-double MktStructBuf[];
+double MainBuf[];
 
-//--- Globals
+//--- Dynamic arrays for tracking objects allocated on heap
 string ChartObjs[1];
 Candle* SwingLows[1];
 Candle* SwingHighs[1];
 Impulse* Impulses[1];          
 OrderBlock* OrderBlocks[1];
 
-
 //--- Global constants
-bool initHasRun            = false;
-string mktStructLbl        = "Market Structure";
-string mainLbl             = "Powered by ICT!";
-string impulseLbl          = "Impulse Tracker";
-string retraceLbl          = "Retrace Tracker";
-string swingHighLbl        = "Swing Highs";
-string swingLowLbl         = "Swing Lows";
-const int SEC_PER_DAY      = 86400;
-
+string MainBufName             = "signal";
+string ImpulseLblName          = "impulses";
+string RetraceLblName          = "retraces";
+string SwingHighLblName        = "swing_highs";
+string SwingLowLblName         = "swing_lows";
 
 //+---------------------------------------------------------------------------+
 //| Custom indicator initialization function                                  |
 //+---------------------------------------------------------------------------+
 int OnInit() {
    ObjectsDeleteAll();   
-  
-   MqlDateTime mdt;
-   TimeToStruct(TimeGMT(),mdt);
-   log("Day of the week: "+(string)mdt.day_of_week+", hour: "+(string)mdt.hour+"(GMT+0)");
-  
-   //--- indicator buffers mapping
    IndicatorBuffers(1);
-   IndicatorShortName(mainLbl);
+   IndicatorShortName("ICT");
    IndicatorDigits(1);
-     
-   SetIndexLabel(0,mktStructLbl);
+   SetIndexLabel(0,MainBufName);
    SetIndexStyle(0,DRAW_LINE,STYLE_SOLID,2, clrBlue);
-   SetIndexBuffer(0, MktStructBuf);
-   ArraySetAsSeries(MktStructBuf,true);
+   SetIndexBuffer(0, MainBuf);
+   ArraySetAsSeries(MainBuf,true);
    SetIndexDrawBegin(0,1);
-
-   ObjectCreate(0,impulseLbl,OBJ_LABEL,0,0,0);
-   ObjectSetString(0,impulseLbl,OBJPROP_TEXT,"Last Impulse:");
-   ObjectSetInteger(0,impulseLbl,OBJPROP_XDISTANCE,5);
-   ObjectSetInteger(0,impulseLbl,OBJPROP_YDISTANCE,50);
-   ObjectSetInteger(0,impulseLbl,OBJPROP_COLOR,clrBlack);
-   
-   ObjectCreate(0,retraceLbl,OBJ_LABEL,0,0,0);
-   ObjectSetString(0,retraceLbl,OBJPROP_TEXT,"Last Retrace:");
-   ObjectSetInteger(0,retraceLbl,OBJPROP_XDISTANCE,5);
-   ObjectSetInteger(0,retraceLbl,OBJPROP_YDISTANCE,75);
-   ObjectSetInteger(0,retraceLbl,OBJPROP_COLOR,clrBlack);
-   
-   ArrayResize(MktStructBuf,1);
-   
-   //log(Symbol()+" digits:"+(string)MarketInfo(Symbol(),MODE_DIGITS)+", point:"+(string)MarketInfo(Symbol(),MODE_POINT)); 
+   CreateLabel("Last Impulse:",ImpulseLblName, 5,50);
+   CreateLabel("Last Retrace:",RetraceLblName, 5,75);
    log("********** ICT Initialized **********");
-   initHasRun=true;
    return(INIT_SUCCEEDED);
 }
 
@@ -111,7 +85,6 @@ void OnDeinit(const int reason) {
    return;
 }
 
-
 //+---------------------------------------------------------------------------+
 //| Custom indicator iteration function                                       |
 //+---------------------------------------------------------------------------+
@@ -135,7 +108,7 @@ int OnCalculate(const int rates_total,
    int iBar;   // TimeSeries
    if(prev_calculated==0) {
       iBar = 0;
-      ArrayInitialize(MktStructBuf, EMPTY_VALUE);
+      ArrayInitialize(MainBuf, EMPTY_VALUE);
    }
    else {
       iBar = prev_calculated+1;
@@ -145,17 +118,28 @@ int OnCalculate(const int rates_total,
  
    // Identify/annotate key daily swings
    for(int i=0; i<rates_total; i++){
-      FindSwings(iBar, SwingLows, SwingHighs);
-      MktStructBuf[iBar] = 0;
+     // FindDailyLevels(iBar, low, high, SwingLows, SwingHighs);
+      //FindSwings(iBar, SwingLows, SwingHighs);
+      MainBuf[iBar] = 0;
       iBar++;
    }
+   
+   DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
+   DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
+   DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
    
    FindImpulses(iBar-rates_total,300, Impulses);
    //FindOrderBlocks(3.0, Impulses, OrderBlocks);
    
    log("Found "+(string)ArraySize(SwingHighs)+" SwingHighs and "+(string)ArraySize(SwingLows)+" SwingLows.");
    log("Found "+(string)ArraySize(Impulses)+" impulses!");   
-   log("Price:"+ToPipsStr(close[10]-Close[0])+" pips, Bar "+iBar);
+   log("Price:"+(string)ToPipsStr(close[10]-Close[0])+" pips, Bar "+(string)iBar);
+   
+   log(Impulses[ArraySize(Impulses)-1].ToString());
+   log(Impulses[ArraySize(Impulses)-2].ToString());
+   log(Impulses[ArraySize(Impulses)-3].ToString());
+   log(Impulses[ArraySize(Impulses)-4].ToString());
+   log(Impulses[ArraySize(Impulses)-5].ToString());
    return(rates_total);  
 }
 
