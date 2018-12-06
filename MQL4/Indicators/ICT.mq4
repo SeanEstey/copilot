@@ -10,8 +10,16 @@
 #property strict
 #property indicator_color1 Black
 
-//---- Input params
-sinput int MinImpulseStdDevs  =3;
+#define KEY_L     76
+#define KEY_S     83
+#define MAIN_BUF_NAME   "signal"
+#define IMP_HUD_NAME    "impulses_hud"
+#define OB_HUD_NAME     "ob_hud"
+#define SH_HUD_NAME     "sh_hud"
+#define SL_HUD_NAME     "sl_hug"
+
+//---- Inputs
+sinput double MinImpulseStdDevs  =3;
 
 #include <FX/Logging.mqh>
 #include <FX/Utility.mqh>
@@ -19,22 +27,20 @@ sinput int MinImpulseStdDevs  =3;
 #include <FX/PriceMovement.mqh>
 #include <FX/ChartObjects.mqh>
 
-//--- Buffers
+//--- Indicator Buffers
 double MainBuf[];
 
-//--- Dynamic arrays for tracking objects allocated on heap
+//--- Dynamic pointer arrays (
 string ChartObjs[];
-Candle* SwingLows[];
-Candle* SwingHighs[];
+Candle* SL[];
+Candle* SH[];
 Impulse* Impulses[];          
 OrderBlock* OrderBlocks[];
 
 //--- Global constants
-string MainBufName             = "signal";
-string ImpulseLblName          = "impulses";
-string RetraceLblName          = "retraces";
-string SwingHighLblName        = "swing_highs";
-string SwingLowLblName         = "swing_lows";
+bool HLinesVisible         = true;
+bool SwingLblsVisible      = true;
+
 
 //+---------------------------------------------------------------------------+
 //| Custom indicator initialization function                                  |
@@ -44,13 +50,13 @@ int OnInit() {
    IndicatorBuffers(1);
    IndicatorShortName("ICT");
    IndicatorDigits(1);
-   SetIndexLabel(0,MainBufName);
+   SetIndexLabel(0,MAIN_BUF_NAME);
    SetIndexStyle(0,DRAW_LINE,STYLE_SOLID,2, clrBlue);
    SetIndexBuffer(0, MainBuf);
    ArraySetAsSeries(MainBuf,true);
    SetIndexDrawBegin(0,1);
-   CreateLabel("",SwingHighLblName, 5,50);
-   CreateLabel("",SwingLowLblName, 5,90);
+   CreateLabel("",SH_HUD_NAME, 5,50);
+   CreateLabel("",SL_HUD_NAME, 5,90);
    log("********** ICT Initialized **********");
    return(INIT_SUCCEEDED);
 }
@@ -60,27 +66,17 @@ int OnInit() {
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    
-   for(int i=0; i<ArraySize(Impulses); i++) {
+   for(int i=0; i<ArraySize(ChartObjs); i++)
+      ObjectDelete(ChartObjs[i]);
+   for(int i=0; i<ArraySize(Impulses); i++)
       delete(Impulses[i]);
-   }
-   for(int i=0; i<ArraySize(SwingLows); i++) {
-      delete(SwingLows[i]);
-   }
-   for(int i=0; i<ArraySize(SwingHighs); i++) {
-      delete(SwingHighs[i]);
-   }
-   for(int i=0; i<ArraySize(OrderBlocks); i++) {
+   for(int i=0; i<ArraySize(SL); i++)
+      delete(SL[i]);
+   for(int i=0; i<ArraySize(SH); i++)
+      delete(SH[i]);
+   for(int i=0; i<ArraySize(OrderBlocks); i++)
       delete(OrderBlocks[i]);
-   }
-   for(int i=0; i<ArraySize(ChartObjs); i++) {
-      //ObjectDelete(ChartObjs[i]);
-   }
-   
-   /*for(int i=0; i<ArraySize(ChartObjs); i++) {
-      int r=ObjectDelete(ChartObjs[i]);
-      log("deleted object "+(string)ChartObjs[i]+", result:"+(string)r+", Desc:"+GetLastError());
-   }*/
-   //ObjectsDeleteAll();
+      
    log("********** ICT De-initialized **********");
    return;
 }
@@ -116,31 +112,101 @@ int OnCalculate(const int rates_total,
          return rates_total;
    }
  
-   // Identify/annotate key daily swings
+   // Main buffer loop
    for(int i=0; i<rates_total; i++){
       MainBuf[iBar] = 0;
+      
       iBar++;
    }
    
-   // Draw annotations
-   DrawSwingLabels(Symbol(), 0, 0, 100, clrBlack, low, high, SwingLows, SwingHighs, ChartObjs);
+   // Identify/annotate key daily swings
+   DrawOverlay(time, high, low);
+   FindImpulses(0, 1000, Impulses, MinImpulseStdDevs);
+   
+   
+   return(rates_total);  
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+void DrawOverlay(const datetime &time[], const double &high[], const double &low[]) {
+   
+   DrawSwingLabels(Symbol(), 0, 0, 1000, clrBlack, low, high, SL, SH, ChartObjs);
+   
    DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
    DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
    DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
    
-   // DEBUGGING CODE. THROW AWAY.
-   int hh_shift=GetSignificantVisibleSwing(SWING_HIGH, SwingHighs);
-   ObjectSetString(0,SwingHighLblName,OBJPROP_TEXT,
+   // HUD Stats
+   int hh_shift=GetSignificantVisibleSwing(SWING_HIGH, SH);
+   ObjectSetString(0,SH_HUD_NAME,OBJPROP_TEXT,
       "Highest Visible SH: "+(string)high[hh_shift]+" ("+TimeToStr(time[hh_shift])+")"); 
-   int ll_shift=GetSignificantVisibleSwing(SWING_LOW, SwingLows);
-   ObjectSetString(0,SwingLowLblName,OBJPROP_TEXT,
+   int ll_shift=GetSignificantVisibleSwing(SWING_LOW, SL);
+   ObjectSetString(0,SL_HUD_NAME,OBJPROP_TEXT,
       "Lowest Visible SL: "+(string)low[ll_shift]+" ("+TimeToStr(time[ll_shift])+")"); 
-   
-   
-   log("Found "+(string)ArraySize(SwingHighs)+" SwingHighs and "+(string)ArraySize(SwingLows)+" SwingLows.");
-   //log("Found "+(string)ArraySize(Impulses)+" impulses!");   
-   return(rates_total);  
+     
+   // log("Found "+(string)ArraySize(SH)+" SH and "+(string)ArraySize(SL)+" SL.");
+   // log("Found "+(string)ArraySize(Impulses)+" impulses!");   
 }
 
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+void OnChartEvent(const int id,         // Event ID 
+                  const long& lparam,   // Parameter of type long event 
+                  const double& dparam, // Parameter of type double event 
+                  const string& sparam  // Parameter of type string events 
+  ){
+   if(id==CHARTEVENT_CLICK) { 
+      log("Clicked chart coords x:"+(string)lparam+", y:"+(string)dparam);
+   } 
+   else if(id==CHARTEVENT_OBJECT_CLICK) { 
+      log("Clicked object '"+sparam+"'"); 
+   } 
+   //--- the key has been pressed 
+   else if(id==CHARTEVENT_KEYDOWN) { 
+      switch(lparam) { 
 
-   
+         // Toggle Swing Candle labels
+         case KEY_S: 
+            SwingLblsVisible = SwingLblsVisible ? false : true;
+            
+            for(int i=0; i<ArraySize(SH); i++) {
+               SH[i].Annotate(SwingLblsVisible);
+            }
+            for(int i=0; i<ArraySize(SL); i++) {
+               SL[i].Annotate(SwingLblsVisible);
+            }
+            
+            log("SwingLbls toggled:"+(string)SwingLblsVisible);
+            break;
+         
+         // Toggle horizontal level lines
+         case KEY_L:
+            if(HLinesVisible==true) {
+               for(int i=0; i<ArraySize(ChartObjs); i++) {
+                  if(ObjectType(ChartObjs[i])==OBJ_TREND)
+                     ObjectDelete(ChartObjs[i]);
+               }
+               HLinesVisible=false;
+            }
+            else {
+               DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
+               DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
+               DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
+               HLinesVisible=true;
+            }
+            log("HLinesVisible:"+(string)HLinesVisible);
+            break;
+            
+         default: 
+            log("Unmapped key:"+(string)lparam); 
+      } 
+      ChartRedraw(); 
+   }
+   else if(id==CHARTEVENT_CHART_CHANGE) {
+      //Change of the chart size or modification of chart properties through the Properties dialog
+      //log("new chart");
+   }
+}
