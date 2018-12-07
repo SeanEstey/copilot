@@ -7,18 +7,24 @@
 #property strict
 #property indicator_chart_window
 #property description "ICT"
+#property indicator_buffers 2
+#property indicator_color1 Blue
+#property indicator_color2 Red
 #property strict
-#property indicator_color1 Black
 
 #define KEY_L     76
 #define KEY_S     83
-#define MAIN_BUF_NAME   "signal"
+#define EMA1_BUF_NAME   "ema_fast"
+#define EMA2_BUF_NAME   "ema_slow"
 #define IMP_HUD_NAME    "impulses_hud"
 #define OB_HUD_NAME     "ob_hud"
 #define SH_HUD_NAME     "sh_hud"
 #define SL_HUD_NAME     "sl_hug"
+#define TREND_HUD_NAME  "trend"
 
 //---- Inputs
+sinput int EMA1_Period           =9;
+sinput int EMA2_Period           =18;
 sinput double MinImpulseStdDevs  =3;
 
 #include <FX/Logging.mqh>
@@ -28,7 +34,8 @@ sinput double MinImpulseStdDevs  =3;
 #include <FX/ChartObjects.mqh>
 
 //--- Indicator Buffers
-double MainBuf[];
+double Ema1Buf[];
+double Ema2Buf[];
 
 //--- Dynamic pointer arrays (
 string ChartObjs[];
@@ -37,26 +44,44 @@ Candle* SH[];
 Impulse* Impulses[];          
 OrderBlock* OrderBlocks[];
 
-//--- Global constants
-bool HLinesVisible         = true;
-bool SwingLblsVisible      = true;
+
+//--- Hud State Globals
+/*** TODO: encapsulate into class ***/
+int VislbleHH              = 0;
+int VisibleLL              = 0;
+bool ShowLevels            = true;
+bool ShowSwings            = true;
+int  Trend                 = 0;
 
 
 //+---------------------------------------------------------------------------+
 //| Custom indicator initialization function                                  |
 //+---------------------------------------------------------------------------+
 int OnInit() { 
-   ObjectsDeleteAll();   
-   IndicatorBuffers(1);
+   // Init indicator
+  // ObjectsDeleteAll();   
    IndicatorShortName("ICT");
-   IndicatorDigits(1);
-   SetIndexLabel(0,MAIN_BUF_NAME);
-   SetIndexStyle(0,DRAW_LINE,STYLE_SOLID,2, clrBlue);
-   SetIndexBuffer(0, MainBuf);
-   ArraySetAsSeries(MainBuf,true);
-   SetIndexDrawBegin(0,1);
+   IndicatorDigits(3);
+   IndicatorBuffers(2);
+   
+   // Init buffers
+   SetIndexLabel(0,EMA1_BUF_NAME);
+   SetIndexStyle(0,DRAW_LINE,STYLE_DASH,2, clrMediumTurquoise);
+   SetIndexBuffer(0, Ema1Buf);
+   ArraySetAsSeries(Ema1Buf,true);
+   ArrayInitialize(Ema1Buf,0);
+   
+   SetIndexLabel(1,EMA2_BUF_NAME);
+   SetIndexStyle(1,DRAW_LINE,STYLE_DASH, 2, clrOrange);
+   SetIndexBuffer(1, Ema2Buf);
+   ArraySetAsSeries(Ema2Buf,true);
+   ArrayInitialize(Ema2Buf,0);
+   
+   // Hud labels
    CreateLabel("",SH_HUD_NAME, 5,50);
    CreateLabel("",SL_HUD_NAME, 5,90);
+   CreateLabel("",TREND_HUD_NAME,5,130);
+   
    log("********** ICT Initialized **********");
    return(INIT_SUCCEEDED);
 }
@@ -101,53 +126,77 @@ int OnCalculate(const int rates_total,
    ArraySetAsSeries(low,true);
    ArraySetAsSeries(close,true);
    
-   int iBar;   // TimeSeries
+   int pos;   // TimeSeries
    if(prev_calculated==0) {
-      iBar = 0;
-      ArrayInitialize(MainBuf, EMPTY_VALUE);
+      pos=rates_total-1;
+      ArrayInitialize(Ema1Buf, EMPTY_VALUE);
+      ArrayInitialize(Ema2Buf, EMPTY_VALUE);
    }
    else {
-      iBar = prev_calculated+1;
-      if(iBar>=Bars)
+      pos = prev_calculated-rates_total+1;
+      if(pos>=Bars)
          return rates_total;
    }
  
+   int buf1_tf_period=GetAdjustedPeriod(EMA1_Period);
+   int buf2_tf_period=GetAdjustedPeriod(EMA2_Period);
+   
    // Main buffer loop
-   for(int i=0; i<rates_total; i++){
-      MainBuf[iBar] = 0;
-      
-      iBar++;
+   for(; pos>0; pos--){
+      Ema1Buf[pos] = iMA(Symbol(),0,buf1_tf_period,0,MODE_EMA,PRICE_CLOSE,pos);
+      Ema2Buf[pos] = iMA(Symbol(),0,buf2_tf_period,0,MODE_EMA,PRICE_CLOSE,pos);
    }
-   
-   // Identify/annotate key daily swings
-   DrawOverlay(time, high, low);
-   FindImpulses(0, 1000, Impulses, MinImpulseStdDevs);
-   
-   
+      
+   DrawHud(time, high, low);
+   //FindImpulses(prev_calculated+1, 1000, Impulses, MinImpulseStdDevs, ChartObjs);
+   log("OnCalc updated "+(string)rates_total+" bars");
    return(rates_total);  
 }
 
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-void DrawOverlay(const datetime &time[], const double &high[], const double &low[]) {
+int GetTrend(){
+   double ema1=Ema1Buf[1];
+   double ema2=Ema2Buf[1];
    
-   DrawSwingLabels(Symbol(), 0, 0, 1000, clrBlack, low, high, SL, SH, ChartObjs);
+   // Crossover
+   if(ema1>ema2) {
+      log("EMA Crossover ("+DoubleToStr(ema1,3)+">"+DoubleToStr(ema2,3)+")");
+      return 1;
+   }
+   // Crossunder
+   else if(ema1<ema2) {
+      log("EMA Crossunder ("+DoubleToStr(ema1,3)+"<"+DoubleToStr(ema2,3)+")");
+      return -1;
+   }
    
+   log("No trend ("+DoubleToStr(ema1,3)+"=="+DoubleToStr(ema2,3)+")");
+   return 0;
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+void DrawHud(const datetime &time[], const double &high[], const double &low[]) {
+   
+   DrawSwingLabels(Symbol(), 0, 10000, 0, clrBlack, low, high, SL, SH, ChartObjs);
    DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
-   DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
-   DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
+   //DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
+   //DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
    
    // HUD Stats
-   int hh_shift=GetSignificantVisibleSwing(SWING_HIGH, SH);
+   int VisibleHH=GetSignificantVisibleSwing(SWING_HIGH, SH);
    ObjectSetString(0,SH_HUD_NAME,OBJPROP_TEXT,
-      "Highest Visible SH: "+(string)high[hh_shift]+" ("+TimeToStr(time[hh_shift])+")"); 
-   int ll_shift=GetSignificantVisibleSwing(SWING_LOW, SL);
+      "Highest SH: "+(string)high[VisibleHH]+" ("+TimeToStr(time[VisibleHH])+")"); 
+   int VisibleLL=GetSignificantVisibleSwing(SWING_LOW, SL);
    ObjectSetString(0,SL_HUD_NAME,OBJPROP_TEXT,
-      "Lowest Visible SL: "+(string)low[ll_shift]+" ("+TimeToStr(time[ll_shift])+")"); 
-     
-   // log("Found "+(string)ArraySize(SH)+" SH and "+(string)ArraySize(SL)+" SL.");
-   // log("Found "+(string)ArraySize(Impulses)+" impulses!");   
+      "Lowest SL: "+(string)low[VisibleLL]+" ("+TimeToStr(time[VisibleLL])+")"); 
+   
+   // Bullish/Bearish trend display
+   int trend=GetTrend();
+   string trend_text = trend==1 ? "Trend: Bullish AF" : trend==-1 ? "Trend: Bearish AF" : "Trend: None";
+   ObjectSetString(0,TREND_HUD_NAME,OBJPROP_TEXT, trend_text);
 }
 
 //+---------------------------------------------------------------------------+
@@ -170,34 +219,34 @@ void OnChartEvent(const int id,         // Event ID
 
          // Toggle Swing Candle labels
          case KEY_S: 
-            SwingLblsVisible = SwingLblsVisible ? false : true;
+            ShowSwings = ShowSwings ? false : true;
             
             for(int i=0; i<ArraySize(SH); i++) {
-               SH[i].Annotate(SwingLblsVisible);
+               SH[i].Annotate(ShowSwings);
             }
             for(int i=0; i<ArraySize(SL); i++) {
-               SL[i].Annotate(SwingLblsVisible);
+               SL[i].Annotate(ShowSwings);
             }
             
-            log("SwingLbls toggled:"+(string)SwingLblsVisible);
+            log("ShowSwings:"+(string)ShowSwings);
             break;
          
          // Toggle horizontal level lines
          case KEY_L:
-            if(HLinesVisible==true) {
+            if(ShowLevels==true) {
                for(int i=0; i<ArraySize(ChartObjs); i++) {
                   if(ObjectType(ChartObjs[i])==OBJ_TREND)
                      ObjectDelete(ChartObjs[i]);
                }
-               HLinesVisible=false;
+               ShowLevels=false;
             }
             else {
                DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
                DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
                DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
-               HLinesVisible=true;
+               ShowLevels=true;
             }
-            log("HLinesVisible:"+(string)HLinesVisible);
+            log("ShowLevels:"+(string)ShowLevels);
             break;
             
          default: 
@@ -209,4 +258,22 @@ void OnChartEvent(const int id,         // Event ID
       //Change of the chart size or modification of chart properties through the Properties dialog
       //log("new chart");
    }
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+int GetAdjustedPeriod(int daily_period){
+   if(PERIOD_CURRENT > PERIOD_D1) {
+      log("Cannot scale period higher than Daily!");
+      return -1;
+   }
+   
+   int period=daily_period*(PERIOD_D1/Period());
+   
+   if(period >= Bars) {
+      log("AdjustedPeriod "+(string)daily_period+"-->"+(string)period+" exceeds Bars!");
+      return -1;
+   }
+   return period;
 }
