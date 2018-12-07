@@ -1,3 +1,3 @@
-# Trading algos for various platforms
+# MT4 Indicators and Expert Advisors
 
-![alt text](https://github.com/SeanEstey/algos/blob/master/images/renkonator_backtest.png "Renkonator Pine Backtest")
+![alt text](https://github.com/SeanEstey/pine/blob/master/images/ict.png "ICT Indicator")
