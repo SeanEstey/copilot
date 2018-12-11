@@ -5,7 +5,6 @@
 #property copyright "Copyright 2018, Sean Estey"
 #property version   "1.00"
 #property strict
-#property strict
 
 //--- HUD
 #define HUD_RECT_XPOS            25
@@ -15,7 +14,7 @@
 #define HUD_RECT_COLOR           C'59,103,186'        //C'239,255,232'
 #define HUD_RECT_BORDER_COLOR    C'191,225,255'         //C'100,186,61'
 #define HUD_ITEM_START_X         50
-#define HUD_ITEM_START_Y         20
+#define HUD_ITEM_START_Y         50
 #define HUD_ITEM_ROW_HEIGHT      35
 #define HUD_ITEM_LBL_WIDTH       200
 
@@ -51,7 +50,7 @@ class HudItem {
    ~HudItem(){
       ObjectDelete(0,this.DescName);
       ObjectDelete(0,this.ValName);
-      debuglog("HudItem destructor");
+      //debuglog("HudItem destructor");
    }
 };
 
@@ -63,9 +62,11 @@ class HUD {
       HudItem* Items[];
       int x, y;
       int height, width;
+      string title;
       
       //-----------------------------------------------------------------------+
-      void HUD() {
+      void HUD(string _title) {
+         this.title=_title;
          this.x=HUD_RECT_XPOS;
          this.y=HUD_RECT_YPOS;
          this.width=HUD_RECT_WIDTH;
@@ -73,7 +74,9 @@ class HUD {
          
          CreateLabelRect(0,"hud_rect",0,
             HUD_RECT_XPOS,HUD_RECT_YPOS,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,
-            HUD_RECT_COLOR,0,0,HUD_RECT_BORDER_COLOR,0,2,false);
+            HUD_RECT_COLOR,0,0,HUD_RECT_BORDER_COLOR,0,2,false);         
+         CreateLabel(this.title,"hud_title",HUD_ITEM_START_X,HUD_RECT_YPOS+15,0,0,0,0,"Arial Bold",12,clrWhite);
+         
          debuglog("HUD constructor");
       }
       
@@ -83,7 +86,8 @@ class HUD {
             delete Items[i];
          }
          ObjectDelete(0,"hud_rect");
-         debuglog("HUD destructor");
+         ObjectDelete(0,"hud_title");
+         //debuglog("HUD destructor");
       }
       
       //-----------------------------------------------------------------------+

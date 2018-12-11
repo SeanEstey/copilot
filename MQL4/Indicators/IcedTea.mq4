@@ -2,8 +2,10 @@
 //|                                                               IcedTea.mq4 |
 //|                                                Copyright 2018, Sean Estey |      
 //+---------------------------------------------------------------------------+
+
+#define VERSION "0.1"
+#property version VERSION
 #property copyright "Copyright 2018, Sean Estey"
-#property version   "1.00"
 #property strict
 #property indicator_chart_window
 #property description "IcedTea Robot"
@@ -56,13 +58,11 @@ bool ShowSwings            = true;
 //+---------------------------------------------------------------------------+
 int OnInit() { 
    /* Init indicator & chart */
-  
+   
    IndicatorShortName("IcedTea");
    IndicatorDigits(3);
    IndicatorBuffers(2);
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
- 
-   
    
    /* Init Buffers */
    
@@ -79,14 +79,12 @@ int OnInit() {
    ArrayInitialize(Ema2Buf, EMPTY_VALUE);
    
    /* Init custom modules */
-   Hud = new HUD();
-   Hud.AddItem("hud_title","IcedTea HUD","");
+   Hud = new HUD("IcedTea v"+VERSION);
    Hud.AddItem("hud_hover_bar","Hover Bar","");
    Hud.AddItem("hud_window_bars","Bars","");
    Hud.AddItem("hud_highest_high","High","");
    Hud.AddItem("hud_lowest_low", "Low", "");
-   Hud.AddItem("hud_trend", "Trend", "");
-   
+   Hud.AddItem("hud_trend", "EMA Trend", "");  
   
    log("********** IcedTea Initialized **********");
    return(INIT_SUCCEEDED);
@@ -99,6 +97,7 @@ void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    
    delete Hud;
+  
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR);
    
@@ -144,30 +143,31 @@ int OnCalculate(const int rates_total,
     
    }
    else {
-      pos = rates_total-prev_calculated;
+      pos = rates_total - prev_calculated;
       if(pos>=Bars)
          return rates_total;
    }
- 
+   
+   //log("***OnCalc() start***");
    int ema1_len=ScalePeriod(EMA1_Period);
    int ema2_len=ScalePeriod(EMA2_Period);
    
-   // Main buffer loop..
+   // Main buffer loop
    for(int i=pos; i>=0; i--){
-      //Ema1Buf[i] = iMA(Symbol(),0,ema1_len,0,MODE_EMA,PRICE_CLOSE,i);
-      //Ema2Buf[i] = iMA(Symbol(),0,ema2_len,0,MODE_EMA,PRICE_CLOSE,i);
+      Ema1Buf[i] = iMA(Symbol(),0,ema1_len,0,MODE_EMA,PRICE_CLOSE,i);
+      Ema2Buf[i] = iMA(Symbol(),0,ema2_len,0,MODE_EMA,PRICE_CLOSE,i);
    }
    
    if(pos>0) {
-      UpdateSwings(Symbol(), 0, Bars, 0, clrBlack, low, high, Lows, Highs, ChartObjs);
+      UpdateSwings(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
-      ShowSwingVariances(Symbol(),0,Highs,ChartObjs);
-      ShowSwingVariances(Symbol(),0,Lows,ChartObjs);
-      
-      log("OnCalc updated "+(string)+pos+" bars. prev:"+(string)prev_calculated+", rates_total:"+(string)rates_total);
+      UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
+      UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
+       log("***OnCalc updated "+(string)+pos+" bars. prev:"+(string)prev_calculated+", rates_total:"+(string)rates_total+"***");
    }
+  
    return(rates_total);  
 }
 
@@ -191,7 +191,10 @@ void OnChartEvent(const int id,         // Event ID
    else if(id==CHARTEVENT_OBJECT_CLICK) { 
       //log("Clicked object '"+sparam+"'"); 
    }
+   // Chart either scrolled on current TF or changed TF
    else if(id==CHARTEVENT_CHART_CHANGE) {
+      log("CHARTEVENT_CHART_CHANGE. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
+      
       /* Update HUD */
       int first = WindowFirstVisibleBar();
       int last = first-WindowBarsPerChart();
@@ -208,12 +211,15 @@ void OnChartEvent(const int id,         // Event ID
     
       int trend=GetTrend();
       Hud.SetItemValue("hud_trend", trend==1? "Bullish" : trend==-1? "Bearish" : "N/A");
-   
    }
    //--- the key has been pressed 
    else if(id==CHARTEVENT_KEYDOWN) { 
       switch(lparam) { 
-
+         
+         /*** TODO: add KEY_L, to toggle labels on/off ***/
+         /*** TODO: add KEY_D, to toggle drawings on/off ***/
+         /*** TODO: add KEY_H, to toggle labels+drawings on/off ***/
+         
          // Toggle Swing Candle labels
          case KEY_S: 
             ShowSwings = ShowSwings ? false : true;
@@ -258,21 +264,25 @@ void OnChartEvent(const int id,         // Event ID
 //| 
 //+---------------------------------------------------------------------------+
 int GetTrend(){
-   double ema1=iMA(Symbol(),0,9,0,MODE_EMA,PRICE_CLOSE,0);
-   double ema2=iMA(Symbol(),0,18,0,MODE_EMA,PRICE_CLOSE,0);
-   
-   // Crossover
-   if(ema1>ema2) {
-      debuglog("EMA Crossover ("+DoubleToStr(ema1,3)+">"+DoubleToStr(ema2,3)+")");
-      return 1;
-   }
-   // Crossunder
-   else if(ema1<ema2) {
-      debuglog("EMA Crossunder ("+DoubleToStr(ema1,3)+"<"+DoubleToStr(ema2,3)+")");
+   int idx1=1;
+  
+   if(ArraySize(Ema1Buf)<=idx1 || ArraySize(Ema2Buf)<=idx1){
+      debuglog("GetTrend() Buffers not initialized. Ema1Buf.len:"+(string)ArraySize(Ema1Buf)+", Ema2Buf.len:"+(string)ArraySize(Ema2Buf));
       return -1;
    }
    
-   log("No trend ("+DoubleToStr(ema1,3)+"=="+DoubleToStr(ema2,3)+")");
+   // Crossover
+   if(Ema1Buf[idx1]>Ema2Buf[idx1]){
+      debuglog("EMA's Bullish ("+DoubleToStr(Ema1Buf[idx1],3)+">"+DoubleToStr(Ema2Buf[idx1],3)+")");
+      return 1;
+   }
+   // Crossunder
+   else if(Ema1Buf[idx1]<Ema2Buf[idx1]){
+      debuglog("EMA's Bearish ("+DoubleToStr(Ema1Buf[0],3)+"<"+DoubleToStr(Ema2Buf[idx1],3)+")");
+      return -1;
+   }
+   
+   log("No trend ("+DoubleToStr(Ema1Buf[idx1],3)+"=="+DoubleToStr(Ema2Buf[idx1],3)+")");
    return 0;
 }
 
