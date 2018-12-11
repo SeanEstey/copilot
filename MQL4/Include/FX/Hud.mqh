@@ -8,14 +8,16 @@
 #property strict
 
 //--- HUD
-#define HUD_RECT_XPOS      25
-#define HUD_RECT_YPOS      25
-#define HUD_RECT_WIDTH     1000
-#define HUD_RECT_HEIGHT    250
-#define HUD_RECT_COLOR     C'206,225,255'
-#define HUD_ITEM_START_X   35
-#define HUD_ITEM_START_Y   35
-#define HUD_ITEM_LBL_WIDTH 200
+#define HUD_RECT_XPOS            25
+#define HUD_RECT_YPOS            25
+#define HUD_RECT_WIDTH           1000
+#define HUD_RECT_HEIGHT          275
+#define HUD_RECT_COLOR           C'59,103,186'        //C'239,255,232'
+#define HUD_RECT_BORDER_COLOR    C'191,225,255'         //C'100,186,61'
+#define HUD_ITEM_START_X         50
+#define HUD_ITEM_START_Y         20
+#define HUD_ITEM_ROW_HEIGHT      35
+#define HUD_ITEM_LBL_WIDTH       200
 
 //--- Custom includes
 #include <FX/Logging.mqh>
@@ -42,8 +44,8 @@ class HudItem {
       this.x=xpos;
       this.y=ypos;
       
-      CreateLabel(this.Desc+":",this.DescName,this.x,this.y);
-      CreateLabel(this.Val,this.ValName,this.x+HUD_ITEM_LBL_WIDTH,this.y);
+      CreateLabel(this.Desc+":",this.DescName,this.x,this.y,0,0,0,0,"Arial",12,clrWhite);
+      CreateLabel(this.Val,this.ValName,this.x+HUD_ITEM_LBL_WIDTH,this.y,0,0,0,0,"Arial",12,clrWhite);
    }
    
    ~HudItem(){
@@ -70,8 +72,8 @@ class HUD {
          this.height=HUD_RECT_HEIGHT;
          
          CreateLabelRect(0,"hud_rect",0,
-            HUD_RECT_XPOS,HUD_RECT_YPOS,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,HUD_RECT_COLOR,
-            2,0,C'59,114,204',0,2,false);
+            HUD_RECT_XPOS,HUD_RECT_YPOS,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,
+            HUD_RECT_COLOR,0,0,HUD_RECT_BORDER_COLOR,0,2,false);
          debuglog("HUD constructor");
       }
       
@@ -87,7 +89,7 @@ class HUD {
       //-----------------------------------------------------------------------+
       void AddItem(string name, string desc, string value){
          int xpos = HUD_ITEM_START_X;
-         int ypos = HUD_ITEM_START_Y * (ArraySize(Items)+1);
+         int ypos = HUD_ITEM_START_Y + HUD_ITEM_ROW_HEIGHT*(ArraySize(Items)+1);
          ArrayResize(Items,ArraySize(Items)+1);
          Items[ArraySize(Items)-1]=new HudItem(name,desc,value,xpos,ypos);
       }

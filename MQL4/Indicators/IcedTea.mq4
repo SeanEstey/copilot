@@ -15,10 +15,10 @@
 //--- Keyboard inputs
 #define KEY_L           76
 #define KEY_S           83
-//--- HUD
 #define EMA1_BUF_NAME   "EMA_FAST"
 #define EMA2_BUF_NAME   "EMA_SLOW"
-
+#define V_CROSSHAIR     "V_CROSSHAIR"
+#define H_CROSSHAIR     "H_CROSSHAIR"
 
 //---- Inputs
 sinput int EMA1_Period           =9;
@@ -61,6 +61,8 @@ int OnInit() {
    IndicatorDigits(3);
    IndicatorBuffers(2);
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
+ 
+   
    
    /* Init Buffers */
    
@@ -95,7 +97,11 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
+   
    delete Hud;
+   ObjectDelete(0,V_CROSSHAIR);
+   ObjectDelete(0,H_CROSSHAIR);
+   
    for(int i=0; i<ArraySize(ChartObjs); i++)
       ObjectDelete(ChartObjs[i]);
    for(int i=0; i<ArraySize(Impulses); i++)
@@ -146,14 +152,14 @@ int OnCalculate(const int rates_total,
    int ema1_len=ScalePeriod(EMA1_Period);
    int ema2_len=ScalePeriod(EMA2_Period);
    
-   // Main buffer loop
+   // Main buffer loop..
    for(int i=pos; i>=0; i--){
       //Ema1Buf[i] = iMA(Symbol(),0,ema1_len,0,MODE_EMA,PRICE_CLOSE,i);
       //Ema2Buf[i] = iMA(Symbol(),0,ema2_len,0,MODE_EMA,PRICE_CLOSE,i);
    }
    
    if(pos>0) {
-      UpdateSwings(Symbol(), 0, Bars-1, 0, clrBlack, low, high, Lows, Highs, ChartObjs);
+      UpdateSwings(Symbol(), 0, Bars, 0, clrBlack, low, high, Lows, Highs, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
       //DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
@@ -176,10 +182,11 @@ void OnChartEvent(const int id,         // Event ID
    if(id==CHARTEVENT_MOUSE_MOVE) {
       int bar=CoordsToBar((int)lparam, (int)dparam);
       Hud.SetItemValue("hud_hover_bar",(string)bar);
-      //log("Mouse move. Xpos:"+(string)lparam+", Dt:"+(string)dt+", Price:"+(string)price);
+      DrawCrosshair(lparam, (long)dparam);
+      //debuglog("Mouse move. Coords:["+(string)lparam+","+(string)dparam+"]"+", sparam:"+sparam);
    }
    else if(id==CHARTEVENT_CLICK) { 
-      //log("Clicked chart coords x:"+(string)lparam+", y:"+(string)dparam);
+      //log("Mouse click. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
    } 
    else if(id==CHARTEVENT_OBJECT_CLICK) { 
       //log("Clicked object '"+sparam+"'"); 
@@ -196,8 +203,8 @@ void OnChartEvent(const int id,         // Event ID
       datetime hh_time=iTime(Symbol(),0,hh_shift);
       double ll=iLow(Symbol(),0,ll_shift);
       datetime ll_time=iTime(Symbol(),0,ll_shift);
-      Hud.SetItemValue("hud_lowest_low", (string)ll+" [Bar "+(string)(ll_shift+2)+"]"); 
-      Hud.SetItemValue("hud_highest_high", (string)hh+" [Bar "+(string)(hh_shift+2)+"]");
+      Hud.SetItemValue("hud_lowest_low", DoubleToStr(ll,3)+" [Bar "+(string)(ll_shift+2)+"]"); 
+      Hud.SetItemValue("hud_highest_high", DoubleToStr(hh,3)+" [Bar "+(string)(hh_shift+2)+"]");
     
       int trend=GetTrend();
       Hud.SetItemValue("hud_trend", trend==1? "Bullish" : trend==-1? "Bearish" : "N/A");
@@ -247,7 +254,6 @@ void OnChartEvent(const int id,         // Event ID
    }
 }
 
-
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
@@ -268,4 +274,28 @@ int GetTrend(){
    
    log("No trend ("+DoubleToStr(ema1,3)+"=="+DoubleToStr(ema2,3)+")");
    return 0;
+}
+
+//+---------------------------------------------------------------------------+-
+//| 
+//+---------------------------------------------------------------------------+
+int DrawCrosshair(long x, long y) {
+   datetime dt;
+   double price;
+   int window=0;
+   ChartXYToTimePrice(0,x,y,window,dt,price);
+      
+   // Create crosshair
+   if(ObjectFind((string)V_CROSSHAIR)==-1){
+      CreateHLine(H_CROSSHAIR,price,0,0,clrBlack,0,1,false,false,-100);
+      CreateVLine(V_CROSSHAIR,CoordsToBar(x,y),ChartObjs,0,0,clrBlack,0,1,false,false,true,-100);
+      debuglog("Created crosshair");
+   }
+   // Move crosshair to new mouse pos
+   else {
+      ObjectMove(0,H_CROSSHAIR,0,0,price);
+      ObjectMove(0,V_CROSSHAIR,0,dt,0);
+      //debuglog("Moved crosshair to dt:"+(string)dt+", p:"+DoubleToStr(price,3));
+   }
+   return 1;
 }
