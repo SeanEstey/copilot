@@ -7,8 +7,8 @@
 #property strict
 
 //--- HUD
-#define HUD_RECT_XPOS            25
-#define HUD_RECT_YPOS            25
+#define HUD_RECT_X               25
+#define HUD_RECT_Y               25
 #define HUD_RECT_WIDTH           1000
 #define HUD_RECT_HEIGHT          275
 #define HUD_RECT_COLOR           C'59,103,186'        //C'239,255,232'
@@ -67,15 +67,13 @@ class HUD {
       //-----------------------------------------------------------------------+
       void HUD(string _title) {
          this.title=_title;
-         this.x=HUD_RECT_XPOS;
-         this.y=HUD_RECT_YPOS;
+         this.x=HUD_RECT_X;
+         this.y=HUD_RECT_Y;
          this.width=HUD_RECT_WIDTH;
          this.height=HUD_RECT_HEIGHT;
          
-         CreateLabelRect(0,"hud_rect",0,
-            HUD_RECT_XPOS,HUD_RECT_YPOS,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,
-            HUD_RECT_COLOR,0,0,HUD_RECT_BORDER_COLOR,0,2,false);         
-         CreateLabel(this.title,"hud_title",HUD_ITEM_START_X,HUD_RECT_YPOS+15,0,0,0,0,"Arial Bold",12,clrWhite);
+         CreateLabelRect("hud_rect", HUD_RECT_X,HUD_RECT_Y,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,HUD_RECT_COLOR,0,0,0,0,HUD_RECT_BORDER_COLOR,0,2,false);         
+         CreateLabel(this.title,"hud_title",HUD_ITEM_START_X,HUD_RECT_Y+15,0,0,0,0,"Arial Bold",12,clrWhite);
          
          debuglog("HUD constructor");
       }

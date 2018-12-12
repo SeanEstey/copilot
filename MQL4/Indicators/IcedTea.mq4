@@ -19,8 +19,7 @@
 #define KEY_S           83
 #define EMA1_BUF_NAME   "EMA_FAST"
 #define EMA2_BUF_NAME   "EMA_SLOW"
-#define V_CROSSHAIR     "V_CROSSHAIR"
-#define H_CROSSHAIR     "H_CROSSHAIR"
+
 
 //---- Inputs
 sinput int EMA1_Period           =9;
@@ -30,8 +29,7 @@ sinput double MinImpulseStdDevs  =3;
 #include <FX/Logging.mqh>
 #include <FX/Utility.mqh>
 #include <FX/Chart.mqh>
-#include <FX/Swings.mqh>
-#include <FX/Impulses.mqh>
+#include <FX/SwingGraph.mqh>
 #include <FX/Draw.mqh>
 #include <FX/Hud.mqh>
 
@@ -41,9 +39,6 @@ double Ema1Buf[];
 double Ema2Buf[];
 
 //--- Dynamic pointer arrays
-string ChartObjs[];
-Swing* Lows[];
-Swing* Highs[];
 Impulse* Impulses[];          
 OrderBlock* OrderBlocks[];
 
@@ -101,19 +96,41 @@ void OnDeinit(const int reason) {
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR);
    
-   for(int i=0; i<ArraySize(ChartObjs); i++)
-      ObjectDelete(ChartObjs[i]);
    for(int i=0; i<ArraySize(Impulses); i++)
       delete(Impulses[i]);
-   for(int i=0; i<ArraySize(Lows); i++)
-      delete Lows[i];
-   for(int i=0; i<ArraySize(Highs); i++)
-      delete(Highs[i]);
    for(int i=0; i<ArraySize(OrderBlocks); i++)
       delete(OrderBlocks[i]);
       
+   // TODO: Call CleanUp() from Draw.mqh
+      
    log("********** IcedTea Deinit **********");
    return;
+}
+
+//+---------------------------------------------------------------------------+
+//| MQL4 Callback Method                                                      |
+//+---------------------------------------------------------------------------+
+void OnChartEvent(const int id,         // EventID 
+                  const long& lparam,   
+                  const double& dparam, 
+                  const string& sparam) {
+   switch(id) {
+      case CHARTEVENT_CHART_CHANGE:
+         OnChartChange(lparam,dparam,sparam);
+         break;
+      case CHARTEVENT_KEYDOWN:
+         OnKeyPress(lparam,dparam,sparam);
+         break;
+      case CHARTEVENT_MOUSE_MOVE:
+         OnMouseMove(lparam,dparam,sparam);
+         break;
+      case CHARTEVENT_CLICK:
+         break;
+      case CHARTEVENT_OBJECT_CLICK:
+         break;
+      default:
+         break;
+   }
 }
 
 //+---------------------------------------------------------------------------+
@@ -159,105 +176,13 @@ int OnCalculate(const int rates_total,
    }
    
    if(pos>0) {
-      UpdateSwings(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
-      //DrawLevels(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
-      //DrawLevels(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
-      //DrawLevels(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
-      UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
-      UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
+      //UpdateSwingPoints(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
+      //UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
+      //UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
+      
        log("***OnCalc updated "+(string)+pos+" bars. prev:"+(string)prev_calculated+", rates_total:"+(string)rates_total+"***");
    }
-  
    return(rates_total);  
-}
-
-//+---------------------------------------------------------------------------+
-//| MQL4 Callback Method                                                      |
-//+---------------------------------------------------------------------------+
-void OnChartEvent(const int id,         // Event ID 
-                  const long& lparam,   // Parameter of type long event 
-                  const double& dparam, // Parameter of type double event 
-                  const string& sparam  // Parameter of type string events 
-  ){
-   if(id==CHARTEVENT_MOUSE_MOVE) {
-      int bar=CoordsToBar((int)lparam, (int)dparam);
-      Hud.SetItemValue("hud_hover_bar",(string)bar);
-      DrawCrosshair(lparam, (long)dparam);
-      //debuglog("Mouse move. Coords:["+(string)lparam+","+(string)dparam+"]"+", sparam:"+sparam);
-   }
-   else if(id==CHARTEVENT_CLICK) { 
-      //log("Mouse click. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
-   } 
-   else if(id==CHARTEVENT_OBJECT_CLICK) { 
-      //log("Clicked object '"+sparam+"'"); 
-   }
-   // Chart either scrolled on current TF or changed TF
-   else if(id==CHARTEVENT_CHART_CHANGE) {
-      log("CHARTEVENT_CHART_CHANGE. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
-      
-      /* Update HUD */
-      int first = WindowFirstVisibleBar();
-      int last = first-WindowBarsPerChart();
-      Hud.SetItemValue("hud_window_bars",(string)(last+2)+"-"+(string)(first+2));
-   
-      int hh_shift=iHighest(Symbol(),0,MODE_HIGH,first-last,last);
-      int ll_shift=iLowest(Symbol(),0,MODE_LOW,first-last,last);   
-      double hh=iHigh(Symbol(),0,hh_shift);
-      datetime hh_time=iTime(Symbol(),0,hh_shift);
-      double ll=iLow(Symbol(),0,ll_shift);
-      datetime ll_time=iTime(Symbol(),0,ll_shift);
-      Hud.SetItemValue("hud_lowest_low", DoubleToStr(ll,3)+" [Bar "+(string)(ll_shift+2)+"]"); 
-      Hud.SetItemValue("hud_highest_high", DoubleToStr(hh,3)+" [Bar "+(string)(hh_shift+2)+"]");
-    
-      int trend=GetTrend();
-      Hud.SetItemValue("hud_trend", trend==1? "Bullish" : trend==-1? "Bearish" : "N/A");
-   }
-   //--- the key has been pressed 
-   else if(id==CHARTEVENT_KEYDOWN) { 
-      switch(lparam) { 
-         
-         /*** TODO: add KEY_L, to toggle labels on/off ***/
-         /*** TODO: add KEY_D, to toggle drawings on/off ***/
-         /*** TODO: add KEY_H, to toggle labels+drawings on/off ***/
-         
-         // Toggle Swing Candle labels
-         case KEY_S: 
-            ShowSwings = ShowSwings ? false : true;
-            
-            for(int i=0; i<ArraySize(Highs); i++) {
-               Highs[i].Annotate(ShowSwings);
-            }
-            for(int i=0; i<ArraySize(Lows); i++) {
-               Lows[i].Annotate(ShowSwings);
-            }
-            
-            log("ShowSwings:"+(string)ShowSwings);
-            break;
-         
-         // Toggle horizontal level lines
-         case KEY_L:
-            if(ShowLevels==true) {
-               for(int i=0; i<ArraySize(ChartObjs); i++) {
-                  if(ObjectType(ChartObjs[i])==OBJ_TREND)
-                     ObjectDelete(ChartObjs[i]);
-               }
-               ShowLevels=false;
-            }
-            else {
-               DrawFixedRanges(Symbol(), PERIOD_D1, 0, 100, clrRed, ChartObjs);
-               DrawFixedRanges(Symbol(), PERIOD_W1, 0, 10, clrBlue, ChartObjs);
-               DrawFixedRanges(Symbol(), PERIOD_MN1, 0, 6, clrGreen, ChartObjs);
-               ShowLevels=true;
-            }
-            log("ShowLevels:"+(string)ShowLevels);
-            break;
-            
-         default:
-            debuglog("Unmapped key:"+(string)lparam); 
-            break;
-      } 
-      ChartRedraw(); 
-   }
 }
 
 //+---------------------------------------------------------------------------+
@@ -265,12 +190,10 @@ void OnChartEvent(const int id,         // Event ID
 //+---------------------------------------------------------------------------+
 int GetTrend(){
    int idx1=1;
-  
    if(ArraySize(Ema1Buf)<=idx1 || ArraySize(Ema2Buf)<=idx1){
       debuglog("GetTrend() Buffers not initialized. Ema1Buf.len:"+(string)ArraySize(Ema1Buf)+", Ema2Buf.len:"+(string)ArraySize(Ema2Buf));
       return -1;
    }
-   
    // Crossover
    if(Ema1Buf[idx1]>Ema2Buf[idx1]){
       debuglog("EMA's Bullish ("+DoubleToStr(Ema1Buf[idx1],3)+">"+DoubleToStr(Ema2Buf[idx1],3)+")");
@@ -281,31 +204,81 @@ int GetTrend(){
       debuglog("EMA's Bearish ("+DoubleToStr(Ema1Buf[0],3)+"<"+DoubleToStr(Ema2Buf[idx1],3)+")");
       return -1;
    }
-   
    log("No trend ("+DoubleToStr(Ema1Buf[idx1],3)+"=="+DoubleToStr(Ema2Buf[idx1],3)+")");
    return 0;
 }
 
 //+---------------------------------------------------------------------------+-
+//| OnCalculate() has been called already, and indicator destructor/constructor
+//| on change of TF.
+//+---------------------------------------------------------------------------+
+void OnChartChange(long lparam, double dparam, string sparam) {
+   debuglog("CHARTEVENT_CHART_CHANGE. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
+   
+   // Update HUD
+   int first = WindowFirstVisibleBar();
+   int last = first-WindowBarsPerChart();
+   Hud.SetItemValue("hud_window_bars",(string)(last+2)+"-"+(string)(first+2));
+   int hh_shift=iHighest(Symbol(),0,MODE_HIGH,first-last,last);
+   int ll_shift=iLowest(Symbol(),0,MODE_LOW,first-last,last);   
+   double hh=iHigh(Symbol(),0,hh_shift);
+   datetime hh_time=iTime(Symbol(),0,hh_shift);
+   double ll=iLow(Symbol(),0,ll_shift);
+   datetime ll_time=iTime(Symbol(),0,ll_shift);
+   Hud.SetItemValue("hud_lowest_low", DoubleToStr(ll,3)+" [Bar "+(string)(ll_shift+2)+"]"); 
+   Hud.SetItemValue("hud_highest_high", DoubleToStr(hh,3)+" [Bar "+(string)(hh_shift+2)+"]");
+   int trend=GetTrend();
+   Hud.SetItemValue("hud_trend", trend==1? "Bullish" : trend==-1? "Bearish" : "N/A");
+}
+
+//+---------------------------------------------------------------------------+-
+//| Respond to custom keyboard shortcuts
+//+---------------------------------------------------------------------------+
+void OnKeyPress(long lparam, double dparam, string sparam){
+   // TODO: add KEY_L, to toggle labels on/off
+   // TODO: add KEY_D, to toggle drawings on/off
+   // TODO: add KEY_H, to toggle labels+drawings on/off
+   
+   switch(lparam){
+      case KEY_S: 
+         // Toggle Swing Candle labels
+         ShowSwings = ShowSwings ? false : true;
+         /*for(int i=0; i<ArraySize(Highs); i++) {
+            //Highs[i].Annotate(ShowSwings);
+         }
+         for(int i=0; i<ArraySize(Lows); i++) {
+            //Lows[i].Annotate(ShowSwings);
+         }*/
+         
+         log("ShowSwings:"+(string)ShowSwings);
+         break;
+      case KEY_L: 
+         // Toggle horizontal level lines
+         if(ShowLevels==true) {
+            // TODO: writeme   
+            ShowLevels=false;
+         }
+         else {
+            //DrawFixedRanges(Symbol(), PERIOD_D1, 0, 100, clrRed);
+            //DrawFixedRanges(Symbol(), PERIOD_W1, 0, 10, clrBlue);
+            //DrawFixedRanges(Symbol(), PERIOD_MN1, 0, 6, clrGreen);
+            ShowLevels=true;
+         }
+         log("ShowLevels:"+(string)ShowLevels);
+         break;
+      default:
+         debuglog("Unmapped key:"+(string)lparam); 
+         break;
+   } 
+   ChartRedraw(); 
+}
+
+//+---------------------------------------------------------------------------+-
 //| 
 //+---------------------------------------------------------------------------+
-int DrawCrosshair(long x, long y) {
-   datetime dt;
-   double price;
-   int window=0;
-   ChartXYToTimePrice(0,x,y,window,dt,price);
-      
-   // Create crosshair
-   if(ObjectFind((string)V_CROSSHAIR)==-1){
-      CreateHLine(H_CROSSHAIR,price,0,0,clrBlack,0,1,false,false,-100);
-      CreateVLine(V_CROSSHAIR,CoordsToBar(x,y),ChartObjs,0,0,clrBlack,0,1,false,false,true,-100);
-      debuglog("Created crosshair");
-   }
-   // Move crosshair to new mouse pos
-   else {
-      ObjectMove(0,H_CROSSHAIR,0,0,price);
-      ObjectMove(0,V_CROSSHAIR,0,dt,0);
-      //debuglog("Moved crosshair to dt:"+(string)dt+", p:"+DoubleToStr(price,3));
-   }
-   return 1;
+void OnMouseMove(long lparam, double dparam, string sparam){
+   int bar=CoordsToBar((int)lparam, (int)dparam);
+   Hud.SetItemValue("hud_hover_bar",(string)bar);
+   DrawCrosshair(lparam, (long)dparam);
+   //debuglog("Mouse move. Coords:["+(string)lparam+","+(string)dparam+"]"+", sparam:"+sparam);
 }
