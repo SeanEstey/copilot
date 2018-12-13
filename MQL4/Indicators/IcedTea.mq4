@@ -44,6 +44,7 @@ OrderBlock* OrderBlocks[];
 
 //--- Globals
 HUD* Hud                   = NULL;
+SwingGraph* Swings         = NULL;
 bool ShowLevels            = false;
 bool ShowSwings            = true;
 
@@ -77,9 +78,12 @@ int OnInit() {
    Hud = new HUD("IcedTea v"+VERSION);
    Hud.AddItem("hud_hover_bar","Hover Bar","");
    Hud.AddItem("hud_window_bars","Bars","");
-   Hud.AddItem("hud_highest_high","High","");
-   Hud.AddItem("hud_lowest_low", "Low", "");
-   Hud.AddItem("hud_trend", "EMA Trend", "");  
+   Hud.AddItem("hud_highest_high","Highest High","");
+   Hud.AddItem("hud_lowest_low", "Lowest Low", "");
+   Hud.AddItem("hud_trend", "EMA Trend", "");
+   Hud.AddItem("hud_nodes", "Swing Nodes", "");
+   
+   Swings = new SwingGraph();
   
    log("********** IcedTea Initialized **********");
    return(INIT_SUCCEEDED);
@@ -92,17 +96,14 @@ void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    
    delete Hud;
-  
+   delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR);
-   
    for(int i=0; i<ArraySize(Impulses); i++)
       delete(Impulses[i]);
    for(int i=0; i<ArraySize(OrderBlocks); i++)
       delete(OrderBlocks[i]);
-      
    // TODO: Call CleanUp() from Draw.mqh
-      
    log("********** IcedTea Deinit **********");
    return;
 }
@@ -157,7 +158,7 @@ int OnCalculate(const int rates_total,
    
    if(prev_calculated==0) {
       pos=rates_total-1;
-    
+      Swings.Build(NULL,0,pos,1);
    }
    else {
       pos = rates_total - prev_calculated;
@@ -176,6 +177,7 @@ int OnCalculate(const int rates_total,
    }
    
    if(pos>0) {
+      Swings.UpdateNodes();
       //UpdateSwingPoints(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
       //UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
       //UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
@@ -213,8 +215,6 @@ int GetTrend(){
 //| on change of TF.
 //+---------------------------------------------------------------------------+
 void OnChartChange(long lparam, double dparam, string sparam) {
-   debuglog("CHARTEVENT_CHART_CHANGE. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
-   
    // Update HUD
    int first = WindowFirstVisibleBar();
    int last = first-WindowBarsPerChart();
@@ -227,8 +227,13 @@ void OnChartChange(long lparam, double dparam, string sparam) {
    datetime ll_time=iTime(Symbol(),0,ll_shift);
    Hud.SetItemValue("hud_lowest_low", DoubleToStr(ll,3)+" [Bar "+(string)(ll_shift+2)+"]"); 
    Hud.SetItemValue("hud_highest_high", DoubleToStr(hh,3)+" [Bar "+(string)(hh_shift+2)+"]");
+   
    int trend=GetTrend();
    Hud.SetItemValue("hud_trend", trend==1? "Bullish" : trend==-1? "Bearish" : "N/A");
+   
+   Hud.SetItemValue("hud_nodes", ArraySize(Swings.Nodes));
+   
+   //debuglog("CHARTEVENT_CHART_CHANGE. lparam:"+(string)lparam+", dparam:"+(string)dparam+", sparam:"+(string)sparam);
 }
 
 //+---------------------------------------------------------------------------+-

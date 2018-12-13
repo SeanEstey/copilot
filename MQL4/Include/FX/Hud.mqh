@@ -16,12 +16,19 @@
 #define HUD_ITEM_START_X         50
 #define HUD_ITEM_START_Y         50
 #define HUD_ITEM_ROW_HEIGHT      35
+#define HUD_ITEM_ROW_SPACING     5
 #define HUD_ITEM_LBL_WIDTH       200
+#define HUD_ITEM_COL_WIDTH       500
+
 
 //--- Custom includes
 #include <FX/Logging.mqh>
 #include <FX/Utility.mqh>
 #include <FX/Draw.mqh>
+
+// Globals
+int cur_row=1;
+int cur_col=1;
 
 //-----------------------------------------------------------------------------+
 //|
@@ -62,6 +69,7 @@ class HUD {
       HudItem* Items[];
       int x, y;
       int height, width;
+      int max_rows;
       string title;
       
       //-----------------------------------------------------------------------+
@@ -71,11 +79,12 @@ class HUD {
          this.y=HUD_RECT_Y;
          this.width=HUD_RECT_WIDTH;
          this.height=HUD_RECT_HEIGHT;
+         this.max_rows=(HUD_RECT_HEIGHT-HUD_ITEM_START_Y)/(HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING);
          
          CreateLabelRect("hud_rect", HUD_RECT_X,HUD_RECT_Y,HUD_RECT_WIDTH,HUD_RECT_HEIGHT,HUD_RECT_COLOR,0,0,0,0,HUD_RECT_BORDER_COLOR,0,2,false);         
          CreateLabel(this.title,"hud_title",HUD_ITEM_START_X,HUD_RECT_Y+15,0,0,0,0,"Arial Bold",12,clrWhite);
          
-         debuglog("HUD constructor");
+         debuglog("HUD() MaxRows:"+(string)this.max_rows);
       }
       
       //-----------------------------------------------------------------------+
@@ -90,10 +99,17 @@ class HUD {
       
       //-----------------------------------------------------------------------+
       void AddItem(string name, string desc, string value){
-         int xpos = HUD_ITEM_START_X;
-         int ypos = HUD_ITEM_START_Y + HUD_ITEM_ROW_HEIGHT*(ArraySize(Items)+1);
+         int ypos=HUD_ITEM_START_Y + (cur_row*(HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING));
+         int xpos=HUD_ITEM_START_X+((cur_col-1)*HUD_ITEM_COL_WIDTH);
          ArrayResize(Items,ArraySize(Items)+1);
          Items[ArraySize(Items)-1]=new HudItem(name,desc,value,xpos,ypos);
+         debuglog("HUD.AddItem() MaxRows:"+(string)max_rows+", Col:"+(string)cur_col+", Row:"+(string)cur_row);
+          
+         cur_row++;
+         if(cur_row>max_rows) {
+            cur_row=1;
+            cur_col++;
+         }
       }
       
       //-----------------------------------------------------------------------+
