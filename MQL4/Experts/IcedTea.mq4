@@ -29,6 +29,7 @@ sinput int EMA2_Period           =18;
 sinput double MinImpulseStdDevs  =3;
 
 //--- Globals
+ENUM_TIMEFRAMES Tf         = 0;     // Init this and check it on CHART_EVENT_CHART_CHANGE to detect new TF's
 HUD* Hud                   = NULL;
 SwingGraph* Swings         = NULL;
 bool ShowLevels            = false;
