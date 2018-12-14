@@ -51,6 +51,8 @@ class HudItem {
       CreateLabel(this.Val,this.ValName,this.x+HUD_ITEM_LBL_WIDTH,this.y,0,0,0,0,"Arial",12,clrWhite);
    }
    
+ 
+   
    ~HudItem(){
       ObjectDelete(0,this.DescName);
       ObjectDelete(0,this.ValName);
@@ -113,6 +115,72 @@ class HUD {
          log("Hud.SetItemValue() error. Item '"+name+"' not found.");
          return -1;         
       }
+      
+      string DisplayInfoOnChart(bool on_chart = true, string sep = "\n") {
+      string output;
+      datetime time_current=TimeCurrent();
+      string ea_name="IcedTea";
+      string version="0.01";
+      string ea_text = StringFormat("%s v%s", ea_name, version);
+      string company=AccountInfoString(ACCOUNT_COMPANY); 
+      string name=AccountInfoString(ACCOUNT_NAME); 
+      long login=AccountInfoInteger(ACCOUNT_LOGIN); 
+      string server=AccountInfoString(ACCOUNT_SERVER); 
+      string currency=AccountInfoString(ACCOUNT_CURRENCY); 
+      ENUM_ACCOUNT_TRADE_MODE account_type=(ENUM_ACCOUNT_TRADE_MODE)AccountInfoInteger(ACCOUNT_TRADE_MODE); 
+      string trade_mode; 
+      switch(account_type){ 
+         case  ACCOUNT_TRADE_MODE_DEMO: 
+            trade_mode="demo"; 
+            break; 
+         case  ACCOUNT_TRADE_MODE_CONTEST: 
+            trade_mode="contest"; 
+            break; 
+         default: 
+            trade_mode="real"; 
+            break; 
+      } 
+      ENUM_ACCOUNT_STOPOUT_MODE stop_out_mode=(ENUM_ACCOUNT_STOPOUT_MODE)AccountInfoInteger(ACCOUNT_MARGIN_SO_MODE); 
+      double margin_call=AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL); 
+      double stop_out=AccountInfoDouble(ACCOUNT_MARGIN_SO_SO); 
+      
+      output+=StringFormat("The account of the client '%s' #%d %s opened in '%s' on the server '%s'", 
+               name,login,trade_mode,company,server); 
+      output+=StringFormat("Account currency - %s, MarginCall and StopOut levels are set in %s", 
+               currency,(stop_out_mode==ACCOUNT_STOPOUT_MODE_PERCENT)?"percentage":" money"); 
+      output+=StringFormat("MarginCall=%G, StopOut=%G",margin_call,stop_out);
+      
+      string indent = ""; 
+      indent = "                      ";
+      output += indent + "------------------------------------------------" + sep
+         + indent + StringFormat("| ACCOUNT INFORMATION:%s", sep)
+         + indent + StringFormat("| Server Name: %s, Time: %s%s", AccountInfoString(ACCOUNT_SERVER), TimeToStr(time_current, TIME_DATE|TIME_MINUTES|TIME_SECONDS), sep)
+         + indent + StringFormat("| Stop Out Level: %s, Leverage: 1:%d %s", stop_out, AccountLeverage(), sep)         
+         + indent + "| Last error: " +  "" + sep
+         + indent + "| Last message: " +  "" + sep
+         + indent + "| ------------------------------------------------" + sep
+         + indent + "| MARKET INFORMATION:" + sep
+         + indent + "| Trend: " + "Bullish" + "" + sep
+         + indent + "| ------------------------------------------------" + sep
+         + indent + "| STATISTICS:" + sep
+         + indent + "------------------------------------------------" + sep;
+   
+      if(on_chart){
+         /* FIXME: Text objects can't contain multi-line text so we need to create a separate object for each line instead.
+         ObjectCreate(ea_name, OBJ_LABEL, 0, 0, 0, 0); // Create text object with given name.
+         // Set pixel co-ordinates from top left corner (use OBJPROP_CORNER to set a different corner).
+         ObjectSet(ea_name, OBJPROP_XDISTANCE, 0);
+         ObjectSet(ea_name, OBJPROP_YDISTANCE, 10);
+         ObjectSetText(ea_name, output, 10, "Arial", Red); // Set text, font, and colour for object.
+         // ObjectDelete(ea_name);
+         */
+         //Comment(output);
+         ChartRedraw(); // Redraws the current chart forcedly.
+      }
+      
+      log(output);
+      return output;
+   }
       
       //-----------------------------------------------------------------------+
       string ToString(){ return ""; }

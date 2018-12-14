@@ -39,6 +39,8 @@ bool ShowSwings            = true;
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit() {
+   ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
+   
    log("********** IcedTea Initializing **********");
    Hud = new HUD("IcedTea v"+VERSION);
    Hud.AddItem("hud_hover_bar","Hover Bar","");
@@ -48,6 +50,8 @@ int OnInit() {
    Hud.AddItem("hud_trend", "EMA Trend", "");
    Hud.AddItem("hud_nodes", "Swing Nodes", "");
    Hud.AddItem("hud_node_links", "Node Links", "");
+   
+   Hud.DisplayInfoOnChart();
    
    Swings = new SwingGraph();
    Swings.DiscoverNodes(NULL,0,Bars-1,1);
@@ -66,13 +70,9 @@ void OnDeinit(const int reason) {
    delete Hud;
    delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
-   ObjectDelete(0,H_CROSSHAIR);
-   //for(int i=0; i<ArraySize(Impulses); i++)
-   //   delete(Impulses[i]);
-   //for(int i=0; i<ArraySize(OrderBlocks); i++)
-   //   delete(OrderBlocks[i]);   
-   ObjectsDeleteAll(0,0);
-   log("********** IcedTea Deinit **********");
+   ObjectDelete(0,H_CROSSHAIR); 
+   int n=ObjectsDeleteAll();
+   log("********** IcedTea Deinit. Deleted "+(string)n+" objects. **********");
    return;
 }
 
@@ -110,6 +110,7 @@ void OnChartEvent(const int id,
          OnKeyPress(lparam,dparam,sparam);
          break;
       case CHARTEVENT_MOUSE_MOVE:
+     
          OnMouseMove(lparam,dparam,sparam);
          break;
       case CHARTEVENT_CLICK:
@@ -216,5 +217,6 @@ void OnMouseMove(long lparam, double dparam, string sparam){
    int bar=CoordsToBar((int)lparam, (int)dparam);
    Hud.SetItemValue("hud_hover_bar",(string)bar);
    DrawCrosshair(lparam, (long)dparam);
+   
    //debuglog("Mouse move. Coords:["+(string)lparam+","+(string)dparam+"]"+", sparam:"+sparam);
 }
