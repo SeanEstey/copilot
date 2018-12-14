@@ -36,7 +36,7 @@ bool ShowLevels            = false;
 bool ShowSwings            = true;
 
 //+------------------------------------------------------------------+
-//| Expert initialization function                                   |
+//|                                  |
 //+------------------------------------------------------------------+
 int OnInit() {
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
@@ -63,7 +63,7 @@ int OnInit() {
 }
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
+//|                                 |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
@@ -77,7 +77,7 @@ void OnDeinit(const int reason) {
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                             |
+//|                                              |
 //+------------------------------------------------------------------+
 void OnTick() {
    if(!NewBar())
