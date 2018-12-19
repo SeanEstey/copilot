@@ -24,7 +24,7 @@ struct Container{
 //--- HUD
 #define HUD_RECT_X               25
 #define HUD_RECT_Y               25
-#define HUD_RECT_WIDTH           1000
+#define HUD_RECT_WIDTH           1250
 #define HUD_RECT_HEIGHT          275
 #define HUD_RECT_COLOR           C'59,103,186'        //C'239,255,232'
 #define HUD_RECT_BORDER_COLOR    C'191,225,255'         //C'100,186,61'
