@@ -1,1 +1,4 @@
-*.mqh	diff
+MQL4/Include/FX/*.mqh	diff
+MQL4/Experts/*.mq4	diff
+*.mqh			diff
+*.mq4			diff
