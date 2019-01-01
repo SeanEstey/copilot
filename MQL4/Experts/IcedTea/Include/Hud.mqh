@@ -14,7 +14,7 @@ struct Container{
    color FontColor;
    color BorderColor;
    Container() {
-      X=25; Y=25; Width=1000; Height=275; 
+      X=25; Y=25; Width=1250; Height=275; 
       PadTop=40; PadBottom=40; PadLeft=15; PadRight=15;
       FillColor=C'59,103,186'; FontColor=clrWhite; BorderColor=clrBlack;//C'191,225,255';
    }
@@ -37,11 +37,14 @@ struct Container{
 #define HUD_ITEM_FONT_SIZE       9
 
 
-//--- Custom includes
-#include <FX/Logging.mqh>
-#include <FX/Utility.mqh>
-#include <FX/Draw.mqh>
+#include <mt4gui2.mqh>
+#include "Logging.mqh"
+#include "Utility.mqh"
+#include "Draw.mqh"
 
+// MT4 GUI Globals
+int ButtonWidth = 150;
+int ButtonHeight = 30;
 
 //-----------------------------------------------------------------------------+
 //|
@@ -54,20 +57,21 @@ class HudItem {
       string Val;
       int x;
       int y;
-   HudItem(string name, string desc, string value, int xpos, int ypos){
-      this.DescName=name+"_desc";
-      this.Desc=desc;
-      this.ValName=name+"_val";
-      this.Val=value;
-      this.x=xpos;
-      this.y=ypos;    
-      CreateLabel(this.Desc+":",this.DescName,this.x,this.y,0,0,0,0,"Arial",HUD_ITEM_FONT_SIZE,clrWhite);
-      CreateLabel(this.Val,this.ValName,this.x+HUD_ITEM_LBL_WIDTH,this.y,0,0,0,0,"Arial",HUD_ITEM_FONT_SIZE,clrWhite);
-   }
-   ~HudItem(){
-      ObjectDelete(0,this.DescName);
-      ObjectDelete(0,this.ValName);
-   }
+   public:
+      HudItem(string name, string desc, string value, int xpos, int ypos){
+         this.DescName=name+"_desc";
+         this.Desc=desc;
+         this.ValName=name+"_val";
+         this.Val=value;
+         this.x=xpos;
+         this.y=ypos;    
+         CreateLabel(this.Desc+":",this.DescName,this.x,this.y,0,0,0,0,"Arial",HUD_ITEM_FONT_SIZE,clrWhite);
+         CreateLabel(this.Val,this.ValName,this.x+HUD_ITEM_LBL_WIDTH,this.y,0,0,0,0,"Arial",HUD_ITEM_FONT_SIZE,clrWhite);
+      }
+      ~HudItem(){
+         ObjectDelete(0,this.DescName);
+         ObjectDelete(0,this.ValName);
+      }
 };
 
 //-----------------------------------------------------------------------------+
@@ -79,7 +83,9 @@ class HUD {
       HudItem* Items[];
       int MaxRows;
       string title;
-      
+      int hWindow;
+      int List1,CB1,CB2;
+   public:
       //-----------------------------------------------------------------------+
       void HUD(string _title) {
          this.title=_title;
@@ -97,8 +103,40 @@ class HUD {
             C'59,103,186',0,0,0,0,Status.BorderColor,0,1,false);         
          CreateLabel("SwingGraph built. 230 Nodes, 112 Edges","HudDialogLbl",
             Status.X+15,Status.Y+15,0,0,0,0,"Arial",10,clrWhite);
+            
+         // Init MT4-GUI + Controls
+         int yspacing=HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING;
+         this.hWindow=WindowHandle(Symbol(),Period());		
+      	guiRemoveAll(this.hWindow);            
+      	
+      	// CheckBoxes
+      	string lbl1="Hide Relationships";
+      	string lbl2="Hide Order Blocks";
+	      
+	      this.CB1=guiAdd(this.hWindow,"checkbox",900,40+yspacing,300,30,lbl1);
+	      this.CB2=guiAdd(this.hWindow,"checkbox",900,40+(yspacing*2),300,30,lbl2);
+	      
+	      guiSetText(this.hWindow,this.CB1,lbl1,32,"Arial");
+	      guiSetText(this.hWindow,this.CB2,lbl2,32,"Arial");
+	      
+	      guiSetTextColor(this.hWindow,this.CB1,White);				      
+	      guiSetTextColor(this.hWindow,this.CB2,White);
+	      
+         guiSetBgColor(this.hWindow,this.CB1,C'59,103,186');
+         guiSetBgColor(this.hWindow,this.CB2,C'59,103,186');
+	      
+	      // Dropdown Menu. "Height" argument seems to do nothing
+	      /*this.List1 = guiAdd(this.hWindow,"list",900,40+(yspacing*3),300,800,"List1"); 
+			guiAddListItem(this.hWindow,this.List1,"First List Item");
+			guiAddListItem(this.hWindow,this.List1,"Second List Item");
+			guiAddListItem(this.hWindow,this.List1,"Third List Item");
+			guiAddListItem(this.hWindow,this.List1,"Forth List Item");
+			guiAddListItem(this.hWindow,this.List1,"Fifth List Item");
+			guiSetListSel(this.hWindow,this.List1,0); 
+			guiSetBgColor(this.hWindow,this.List1,C'59,103,186');
+	      guiSetTextColor(this.hWindow,this.List1,White);*/
+	      
       }
-      
       //-----------------------------------------------------------------------+
       void ~HUD(){
          for(int i=0; i<ArraySize(Items); i++)
@@ -107,19 +145,23 @@ class HUD {
          ObjectDelete(0,"HudTitle");
          ObjectDelete(0,"HudDialogBox");
          ObjectDelete(0,"HudDialogLbl");
+         
+         // MT4 GUI library cleanup
+         if(this.hWindow>0){
+            guiRemoveAll(this.hWindow);
+            guiCleanup(this.hWindow); 
+         }
       }
-      
       //-----------------------------------------------------------------------+
       void AddItem(string name, string desc, string value){
          double col=MathCeil(((double)ArraySize(this.Items)+1)/(double)this.MaxRows);
          double row=1+((ArraySize(this.Items))%this.MaxRows);
-         int ypos=HUD_ITEM_START_Y + (row*(HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING));
-         int xpos=HUD_ITEM_START_X+((col-1)*HUD_ITEM_COL_WIDTH);
+         int ypos=HUD_ITEM_START_Y + (int)(row*(HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING));
+         int xpos=HUD_ITEM_START_X+(int)((col-1)*HUD_ITEM_COL_WIDTH);
          ArrayResize(Items,ArraySize(Items)+1);
          Items[ArraySize(Items)-1]=new HudItem(name,desc,value,xpos,ypos);
          //debuglog("HUD.AddItem() MaxRows:"+(string)max_rows+", Col:"+(string)col+", Row:"+(string)row);   
       }
-      
       //-----------------------------------------------------------------------+
       int SetItemValue(string name, string value) {
          for(int i=0; i<ArraySize(Items); i++){
@@ -131,65 +173,8 @@ class HUD {
          log("Hud.SetItemValue() error. Item '"+name+"' not found.");
          return -1;         
       }
-      
       //-----------------------------------------------------------------------+
       void SetDialogMsg(string str){
          ObjectSetText("HudDialogLbl",str);
       }
-      
-      //-----------------------------------------------------------------------+
-      string DisplayInfoOnChart(bool on_chart = true, string sep = "\n") {
-         string output;
-         datetime time_current=TimeCurrent();
-         string ea_name="IcedTea";
-         string version="0.01";
-         string ea_text = StringFormat("%s v%s", ea_name, version);
-         string company=AccountInfoString(ACCOUNT_COMPANY); 
-         string name=AccountInfoString(ACCOUNT_NAME); 
-         long login=AccountInfoInteger(ACCOUNT_LOGIN); 
-         string server=AccountInfoString(ACCOUNT_SERVER); 
-         string currency=AccountInfoString(ACCOUNT_CURRENCY); 
-         ENUM_ACCOUNT_TRADE_MODE account_type=(ENUM_ACCOUNT_TRADE_MODE)AccountInfoInteger(ACCOUNT_TRADE_MODE); 
-         string trade_mode; 
-         switch(account_type){ 
-            case  ACCOUNT_TRADE_MODE_DEMO: 
-               trade_mode="demo"; 
-               break; 
-            case  ACCOUNT_TRADE_MODE_CONTEST: 
-               trade_mode="contest"; 
-               break; 
-            default: 
-               trade_mode="real"; 
-               break; 
-         } 
-         ENUM_ACCOUNT_STOPOUT_MODE stop_out_mode=(ENUM_ACCOUNT_STOPOUT_MODE)AccountInfoInteger(ACCOUNT_MARGIN_SO_MODE); 
-         double margin_call=AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL); 
-         double stop_out=AccountInfoDouble(ACCOUNT_MARGIN_SO_SO); 
-         
-         output+=StringFormat("The account of the client '%s' #%d %s opened in '%s' on the server '%s'", 
-                  name,login,trade_mode,company,server); 
-         output+=StringFormat("Account currency - %s, MarginCall and StopOut levels are set in %s", 
-                  currency,(stop_out_mode==ACCOUNT_STOPOUT_MODE_PERCENT)?"percentage":" money"); 
-         output+=StringFormat("MarginCall=%G, StopOut=%G",margin_call,stop_out);
-         
-         string indent = ""; 
-         indent = "                      ";
-         output += indent + "------------------------------------------------" + sep
-            + indent + StringFormat("| ACCOUNT INFORMATION:%s", sep)
-            + indent + StringFormat("| Server Name: %s, Time: %s%s", AccountInfoString(ACCOUNT_SERVER), TimeToStr(time_current, TIME_DATE|TIME_MINUTES|TIME_SECONDS), sep)
-            + indent + StringFormat("| Stop Out Level: %s, Leverage: 1:%d %s", stop_out, AccountLeverage(), sep)         
-            + indent + "| Last error: " +  "" + sep
-            + indent + "| Last message: " +  "" + sep
-            + indent + "| ------------------------------------------------" + sep
-            + indent + "| MARKET INFORMATION:" + sep
-            + indent + "| Trend: " + "Bullish" + "" + sep
-            + indent + "| ------------------------------------------------" + sep
-            + indent + "| STATISTICS:" + sep
-            + indent + "------------------------------------------------" + sep;
-         //log(output);
-         return output;
-      }
-      
-      //-----------------------------------------------------------------------+
-      string ToString(){ return ""; }
 };

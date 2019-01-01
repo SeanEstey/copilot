@@ -1,31 +1,32 @@
 //+---------------------------------------------------------------------------+
-//|                                                             FX/Trades.mq4 |
+//|                                                               FX/Divs.mq4 |
 //|                                                Copyright 2018, Sean Estey |      
 //+---------------------------------------------------------------------------+
 #property copyright "Copyright 2018, Sean Estey"
+#property version   "1.00"
 #property strict
 
 //--- Custom includes
-#include <FX/Logging.mqh>
-#include <FX/Utility.mqh>
+#include "Logging.mqh"
+#include "Utility.mqh"
 
 //-----------------------------------------------------------------------------+
 //|
 //-----------------------------------------------------------------------------+
-class Trades {      
+class Divs {      
    public:
    
-   Trades(){}
-   ~Trades(){}
+   Divs(){}
+   ~Divs(){}
 };
 
 
+
 //+---------------------------------------------------------------------------+
-//| Setup #1 (Very High Prob): new STL confirms ealier ITL and LTL. Open long 
-//| Setup #2 (Very High Prob): new STH confirms ealier ITH and LTH. Open short 
-//| Setup #3 (High Prob): new STL confirms earlier ITL. Open long 
-//| Setup #4 (High Prob): new STH confirms ealier ITH. Open short 
+//| 
 //+---------------------------------------------------------------------------+
-int FindSetups(){
-  return 1;
+int FindDivs(string symbol1, string symbol2){
+   /* dollar index with other dollar pairs
+    dollar index makes HH, gbpusd makes LL, if gbpusd makes lower high then they accumulating gbpusd
+
 }

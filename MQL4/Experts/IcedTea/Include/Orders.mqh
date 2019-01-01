@@ -6,8 +6,8 @@
 #property strict
 
 //--- Custom includes
-#include <FX/Logging.mqh>
-#include <FX/Draw.mqh>
+#include "Logging.mqh"
+#include "Draw.mqh"
 
 double Lots             = 1.0;
 int    TakeProfit       = 75;   
