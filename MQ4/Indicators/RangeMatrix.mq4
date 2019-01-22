@@ -25,21 +25,75 @@ public:
     double rangeLow;
     double rangeMid;
     double rangeHigh;
-};
-Range* ranges[];
 
-void ClearRanges()
-{
-    for (int i = 0; i < ArraySize(ranges); i++) {
-        ObjectDelete("Range" + (i+1) + "_Low");
-        ObjectDelete("Range" + (i+1) + "_High");
-        ObjectDelete("Range" + (i+1) + "_Mid");
-
-        delete ranges[i];
+    static void Build(double baseRangeLow, double baseRangeHigh)
+    {
+        if (ArraySize(ranges) != 0) {
+            // @TODO make more efficient. just move objects and set variables rather than deleting and recreating.
+            Range::Destroy();
+        }
+    
+        ArrayResize(ranges, 1);
+     
+        Range* mainRange = new Range;
+        mainRange.rangeLow = baseRangeLow;
+        mainRange.rangeHigh = baseRangeHigh;
+        mainRange.rangeMid = (baseRangeLow + baseRangeHigh) / 2;
+        ranges[0] = mainRange;
+     
+        GlobalVariableSet("BaseRangeLow_" + Symbol(), baseRangeLow);
+        GlobalVariableSet("BaseRangeHigh_" + Symbol(), baseRangeHigh);
+     
+        const double rangeDiff = baseRangeHigh - baseRangeLow;
+     
+        for (int i = 0; i < RangeMatrix_resolution/2; i++) {
+            Range* r = new Range;
+            r.rangeHigh = baseRangeLow - (rangeDiff*i);
+            r.rangeLow = r.rangeHigh - rangeDiff;
+            r.rangeMid = (r.rangeHigh + r.rangeLow) / 2;
+    
+            ArrayResize(ranges, ArraySize(ranges)+1);
+            ranges[ArraySize(ranges)-1] = r;
+        }
+    
+        int offset = RangeMatrix_resolution/2;
+    
+        for (int i = 0; i < RangeMatrix_resolution/2; i++) {
+            Range *r = new Range;
+            r.rangeLow = baseRangeHigh + (rangeDiff*i);
+            r.rangeHigh = r.rangeLow + rangeDiff;
+            r.rangeMid = (r.rangeHigh + r.rangeLow) / 2;
+    
+            ArrayResize(ranges, ArraySize(ranges)+1);
+            ranges[ArraySize(ranges)-1] = r;
+        }
+    
+        for (int i = 0; i < ArraySize(ranges); i++) {
+            CreateHLine("Range" + (i+1) + "_Low", ranges[i].rangeLow, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
+            CreateHLine("Range" + (i+1) + "_High", ranges[i].rangeHigh, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
+            CreateHLine("Range" + (i+1) + "_Mid", ranges[i].rangeMid, 0, 0, clrGray, STYLE_DASH);
+            
+            ObjectSet("Range" + (i+1) + "_Low", OBJPROP_SELECTABLE, false);
+            ObjectSet("Range" + (i+1) + "_High", OBJPROP_SELECTABLE, false);
+            ObjectSet("Range" + (i+1) + "_Mid", OBJPROP_SELECTABLE, false);
+        }
     }
+    
+    static void Destroy()
+    {
+        for (int i = 0; i < ArraySize(ranges); i++) {
+            ObjectDelete("Range" + (i+1) + "_Low");
+            ObjectDelete("Range" + (i+1) + "_High");
+            ObjectDelete("Range" + (i+1) + "_Mid");
+    
+            delete ranges[i];
+        }
+    
+        ArrayResize(ranges, 0);
+    }
+};
 
-    ArrayResize(ranges, 0);
-}
+Range* ranges[];
 
 int OnInit()
 {
@@ -52,7 +106,7 @@ int OnInit()
     double baseRangeHigh = GlobalVariableGet("BaseRangeHigh_" + Symbol());
 
     if (baseRangeLow != 0 && baseRangeHigh != 0) {
-        CreateRanges(baseRangeLow, baseRangeHigh);
+        Range::Build(baseRangeLow, baseRangeHigh);
     }
    
    
@@ -61,7 +115,7 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
-    ClearRanges();
+    Range::Destroy();
 }
 
 int OnCalculate(const int rates_total,
@@ -125,67 +179,15 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
 
         ObjectMove(0, "Line2", 0, atTime, atPrice);
         
-        CreateRanges(MathMin(atPrice, glbClicks[0].atPrice), MathMax(atPrice, glbClicks[0].atPrice));
+        Range::Build(MathMin(atPrice, glbClicks[0].atPrice), MathMax(atPrice, glbClicks[0].atPrice));
     }
 }
 
-void CreateRanges(double baseRangeLow, double baseRangeHigh)
-{
-    if (ArraySize(ranges) != 0) {
-        // @TODO make more efficient. just move objects and set variables rather than deleting and recreating.
-        ClearRanges();
-    }
-
-    ArrayResize(ranges, 1);
- 
-    Range* mainRange = new Range;
-    mainRange.rangeLow = baseRangeLow;
-    mainRange.rangeHigh = baseRangeHigh;
-    mainRange.rangeMid = (baseRangeLow + baseRangeHigh) / 2;
-    ranges[0] = mainRange;
- 
-    GlobalVariableSet("BaseRangeLow_" + Symbol(), baseRangeLow);
-    GlobalVariableSet("BaseRangeHigh_" + Symbol(), baseRangeHigh);
- 
-    const double rangeDiff = baseRangeHigh - baseRangeLow;
- 
-    for (int i = 0; i < RangeMatrix_resolution/2; i++) {
-        Range* r = new Range;
-        r.rangeHigh = baseRangeLow - (rangeDiff*i);
-        r.rangeLow = r.rangeHigh - rangeDiff;
-        r.rangeMid = (r.rangeHigh + r.rangeLow) / 2;
-
-        ArrayResize(ranges, ArraySize(ranges)+1);
-        ranges[ArraySize(ranges)-1] = r;
-    }
-
-    int offset = RangeMatrix_resolution/2;
-
-    for (int i = 0; i < RangeMatrix_resolution/2; i++) {
-        Range *r = new Range;
-        r.rangeLow = baseRangeHigh + (rangeDiff*i);
-        r.rangeHigh = r.rangeLow + rangeDiff;
-        r.rangeMid = (r.rangeHigh + r.rangeLow) / 2;
-
-        ArrayResize(ranges, ArraySize(ranges)+1);
-        ranges[ArraySize(ranges)-1] = r;
-    }
-
-    for (int i = 0; i < ArraySize(ranges); i++) {
-        CreateHLine("Range" + (i+1) + "_Low", ranges[i].rangeLow, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
-        CreateHLine("Range" + (i+1) + "_High", ranges[i].rangeHigh, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
-        CreateHLine("Range" + (i+1) + "_Mid", ranges[i].rangeMid, 0, 0, clrGray, STYLE_DASH);
-        
-        ObjectSet("Range" + (i+1) + "_Low", OBJPROP_SELECTABLE, false);
-        ObjectSet("Range" + (i+1) + "_High", OBJPROP_SELECTABLE, false);
-        ObjectSet("Range" + (i+1) + "_Mid", OBJPROP_SELECTABLE, false);
-    }
-}
 
 void RemoveIndicator()
 {
     ObjectDelete(0, "Line1");
     ObjectDelete(0, "Line2");
     
-    ClearRanges();
+    Range::Destroy();
 }
