@@ -4,8 +4,10 @@
 #include <FX/Logging.mqh>
 #include <FX/Utility.mqh>
 #include <FX/Draw.mqh>
+#include <FX/Hud.mqh>
 
 sinput int RangeMatrix_resolution = 10;
+#define KEY_R           82
 
 string glbIndicatorTemporaryId;
 struct ClickHistory {
@@ -17,8 +19,10 @@ struct ClickHistory {
 };
 
 int glbClickCount;
-ClickHistory glbClicks[];
-
+ClickHistory glbClicks[2];
+HUD* Hud = NULL;
+bool DrawRange = false;
+int DrawRangeLine = 0;
 
 class Range {
 public:
@@ -91,9 +95,26 @@ public:
     
         ArrayResize(ranges, 0);
     }
+    
+    static Range* Find(double price)
+    {
+        for (int i = 0; i < ArraySize(ranges); i++) {
+            if (price >= ranges[i].rangeLow && price <= ranges[i].rangeHigh) {
+                return ranges[i];
+            }
+        }
+        
+        return NULL;
+    }
 };
 
 Range* ranges[];
+Range* currentRange = NULL;
+
+class RangeMatrix {
+public:
+    
+};
 
 int OnInit()
 {
@@ -108,7 +129,12 @@ int OnInit()
     if (baseRangeLow != 0 && baseRangeHigh != 0) {
         Range::Build(baseRangeLow, baseRangeHigh);
     }
-   
+
+    Hud = new HUD("Range Matrix");
+    Hud.AddItem("num_ranges", "# of ranges", "");
+    Hud.AddItem("draw_range_line", "Draw range line", "");
+    Hud.AddItem("current_range", "Current range", "N/A");
+    Hud.AddItem("draw_range", "Draw range", "R");
    
     return(INIT_SUCCEEDED);
 }
@@ -116,6 +142,8 @@ int OnInit()
 void OnDeinit(const int reason)
 {
     Range::Destroy();
+    
+    delete Hud;
 }
 
 int OnCalculate(const int rates_total,
@@ -129,7 +157,13 @@ int OnCalculate(const int rates_total,
    const long &volume[],
    const int &spread[])
 {
-   return(rates_total);
+    currentRange = Range::Find(Close[0]);
+    
+    Hud.SetItemValue("num_ranges", (string)ArraySize(ranges));
+    Hud.SetItemValue("draw_range_line", (string)(DrawRangeLine));
+    Hud.SetItemValue("current_range", (currentRange == NULL) ? "N/A" : ("Low: " + currentRange.rangeLow + " | Mid: " + currentRange.rangeMid + " | High: " + currentRange.rangeHigh));
+
+    return(rates_total);
 }
 
 void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
@@ -139,6 +173,9 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
         if (lparam == 27) {
             glbClickCount = 0;
             RemoveIndicator();
+        } else {
+            
+            OnKeyPress(lparam,dparam,sparam);
         }
     } else if (id == CHARTEVENT_CLICK) {
         // Get the x-y coords of the click and convert them to time-price coords
@@ -150,16 +187,27 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
         if (subwindow != 0) {
             RemoveIndicator();
         } else {
-            glbClickCount++;
     
-            ArrayResize(glbClicks,glbClickCount);
-            glbClicks[glbClickCount-1].clickTimestamp=TimeGMT();
-            glbClicks[glbClickCount - 1].x = x;
-            glbClicks[glbClickCount - 1].y = y;
-            glbClicks[glbClickCount-1].atTime=atTime;
-            glbClicks[glbClickCount-1].atPrice=atPrice;
-    
-            if (glbClickCount == 1 && ArraySize(ranges) == 0) {
+            glbClicks[DrawRangeLine].clickTimestamp=TimeGMT();
+            glbClicks[DrawRangeLine].x = x;
+            glbClicks[DrawRangeLine].y = y;
+            glbClicks[DrawRangeLine].atTime=atTime;
+            glbClicks[DrawRangeLine].atPrice=atPrice;
+            
+            if (DrawRange) {
+                DrawRangeLine++;
+                if (DrawRangeLine == 1) {
+                    
+                    CreateHLine("Line2", 0, 0, 0, clrTurquoise);
+                } else if (DrawRangeLine == 2) {
+                    DrawRangeLine = 0;
+                    DrawRange = false;
+                    Hud.SetItemValue("draw_range", "R");
+                    ObjectDelete(0, "Line1");
+                    ObjectDelete(0, "Line2");
+                }
+            }
+    /*if (DrawRange && ArraySize(ranges) == 0) {
                 CreateHLine("Line1", glbClicks[0].atPrice, 0, 0, clrTurquoise);
                 CreateHLine("Line2", 0, 0, 0, clrTurquoise);
              
@@ -169,7 +217,8 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
  
                 ObjectDelete(0, "Line1");
                 ObjectDelete(0, "Line2");
-            }
+                Hud.SetItemValue("draw_range", "R");
+            }*/
         }
     } else if (id == CHARTEVENT_MOUSE_MOVE) {
         int subwindow, x = (int)lparam, y = (int)dparam;
@@ -177,12 +226,36 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
         double atPrice;
         ChartXYToTimePrice(0,x,y,subwindow,atTime,atPrice);
 
-        ObjectMove(0, "Line2", 0, atTime, atPrice);
+        ObjectMove(0, "Line" + (DrawRangeLine+1), 0, atTime, atPrice);
         
-        Range::Build(MathMin(atPrice, glbClicks[0].atPrice), MathMax(atPrice, glbClicks[0].atPrice));
+        if (DrawRange && DrawRangeLine == 1) {
+            Range::Build(MathMin(atPrice, glbClicks[0].atPrice), MathMax(atPrice, glbClicks[0].atPrice));
+        }
     }
 }
 
+void OnKeyPress(long lparam, double dparam, string sparam){
+    debuglog("key = " + lparam);
+    switch (lparam) {
+        case KEY_R: 
+         
+            DrawRange = !DrawRange;
+            DrawRangeLine = 0;
+            Hud.SetItemValue("draw_range", "(Drawing, left-click to place range)");
+         
+            if (DrawRange) {
+                ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,true);
+                CreateHLine("Line1", 0.0, 0, 0, clrTurquoise);
+            } else {
+                ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,false);
+            }
+         
+            break;
+        default:
+            debuglog("Unmapped key:"+(string)lparam); 
+            break;
+    }
+}
 
 void RemoveIndicator()
 {
