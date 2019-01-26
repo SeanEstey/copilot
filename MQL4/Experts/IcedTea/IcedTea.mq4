@@ -46,6 +46,7 @@ int OnInit() {
    Hud.AddItem("hud_node_links", "Node Links", "");
    
    Range_Init(Hud);
+   Range_Update(Hud);
    
    Hud.SetDialogMsg("Hud created.");
    
@@ -88,7 +89,7 @@ void OnTick() {
       guiChangeSymbol(Hud.hWindow,"USDJPY");
    }*/
    
-   Range_OnTick(Hud);
+   Range_Update(Hud);
    
    Swings.UpdateNodeLevels(0);
    
