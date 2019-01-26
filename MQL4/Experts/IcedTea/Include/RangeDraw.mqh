@@ -31,6 +31,7 @@ struct ClickHistory {
 int glbClickCount;
 ClickHistory glbClicks[2];
 bool Range_isDrawing = false;
+bool Range_mouseMoveEnabled = true;
 int Range_drawLineMode = 0;
 
 class Range {
@@ -146,7 +147,7 @@ void Range_DeInit()
     Range_DestroyRanges();
 }
 
-void Range_OnTick(HUD* hud) {
+void Range_Update(HUD* hud) {
     currentRange = Range_FindRange(Close[0]);
 
     Hud.SetItemValue("num_ranges", (string)ArraySize(ranges));
@@ -197,6 +198,8 @@ void Range_HandleChartEvent(HUD* hud, const int id,const long &lparam,const doub
             }
         }
     } else if (id == CHARTEVENT_MOUSE_MOVE) {
+        if (!Range_mouseMoveEnabled) return;
+
         int subwindow, x = (int)lparam, y = (int)dparam;
         datetime atTime;
         double atPrice;
@@ -218,10 +221,10 @@ void Range_HandleKeyPress(HUD* hud, long lparam, double dparam, string sparam) {
             hud.SetItemValue("draw_range_line", "(Drawing, left-click to place range)");
          
             if (Range_isDrawing) {
-                ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,true);
+                Range_mouseMoveEnabled = true;
                 CreateHLine("Line1", 0.0, 0, 0, clrTurquoise);
             } else {
-                ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,false);
+                Range_mouseMoveEnabled = false;
             }
          
             break;
