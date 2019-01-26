@@ -16,7 +16,7 @@
 #include "Draw.mqh"
 #include "Hud.mqh"
 
-sinput int RangeMatrix_resolution = 10;
+sinput int RangeMatrix_resolution = 1;
 #define KEY_R           82
 
 string glbIndicatorTemporaryId;
@@ -209,6 +209,7 @@ void Range_HandleChartEvent(HUD* hud, const int id,const long &lparam,const doub
         
         if (Range_isDrawing && Range_drawLineMode == 1) {
             Range_BuildRanges(MathMin(atPrice, glbClicks[0].atPrice), MathMax(atPrice, glbClicks[0].atPrice));
+            Range_Update(hud);
         }
     }
 }
