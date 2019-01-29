@@ -16,14 +16,19 @@
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
 #include "Include/RangeDraw.mqh"
+#include "Include/RangeManager.mqh"
 
 //--- Keyboard inputs
 #define KEY_L           76
+#define KEY_R           82
 #define KEY_S           83
+#define KEY_ESC         27
+
 
 //--- Globals
 HUD* Hud                   = NULL;
 SwingGraph* Swings         = NULL;
+RangeManager* Rm           = NULL;
 bool ShowLevels            = false;
 bool ShowSwings            = true;
 
@@ -44,10 +49,6 @@ int OnInit() {
    Hud.AddItem("hud_trend", "Swing Trend", "");
    Hud.AddItem("hud_nodes", "Swing Nodes", "");
    Hud.AddItem("hud_node_links", "Node Links", "");
-   
-   Range_Init(Hud);
-   Range_Update(Hud);
-   
    Hud.SetDialogMsg("Hud created.");
    
    Swings = new SwingGraph();
@@ -56,6 +57,9 @@ int OnInit() {
    Swings.FindNeighborRelationships();
    //Swings.FindImpulseRelationships();
    //Swings.FindOrderBlocks();
+   
+   Rm=new RangeManager(Hud);
+   
    log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
    
@@ -89,10 +93,9 @@ void OnTick() {
       guiChangeSymbol(Hud.hWindow,"USDJPY");
    }*/
    
-   Range_Update(Hud);
+   //Range_Update(Hud);
    
    Swings.UpdateNodeLevels(0);
-   
    //UpdateSwingPoints(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
    //UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
    //UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
@@ -112,8 +115,7 @@ double OnTester() {
 void OnChartEvent(const int id,
                   const long &lparam,
                   const double &dparam,
-                  const string &sparam) {
-   Range_HandleChartEvent(Hud, id, lparam, dparam, sparam);
+                  const string &sparam) {   
    switch(id) {
       case CHARTEVENT_CHART_CHANGE:
          OnChartChange(lparam,dparam,sparam);
@@ -125,14 +127,13 @@ void OnChartEvent(const int id,
          OnMouseMove(lparam,dparam,sparam);
          break;
       case CHARTEVENT_CLICK:
+         OnMouseClick(lparam,dparam,sparam);
          break;
       case CHARTEVENT_OBJECT_CLICK:
          break;
       default:
          break;
    }
-   
- 
 }
 
 //+---------------------------------------------------------------------------+-
@@ -162,10 +163,26 @@ void OnChartChange(long lparam, double dparam, string sparam) {
 //+---------------------------------------------------------------------------+
 void OnKeyPress(long lparam, double dparam, string sparam){
    switch((int)lparam){
+      case KEY_ESC:
+         Rm.ToggleBuildMode(false);
+      case KEY_R: 
+         /*Range_isDrawing = !Range_isDrawing;
+         Range_drawLineMode = 0;
+         hud.SetItemValue("draw_range_line", "(Drawing, left-click to place range)");
+         
+         if(Rm.inRange_isDrawing) {
+             Range_mouseMoveEnabled = true;
+             CreateHLine("Line1", 0.0, 0, 0, clrTurquoise);
+         }
+         else {
+             Range_mouseMoveEnabled = false;
+         }*/
+         break;   
       case KEY_S: 
          break;
       case KEY_L: 
          break;
+         
       default:
          //debuglog("Unmapped key:"+(string)lparam); 
          break;
@@ -187,6 +204,10 @@ void OnMouseMove(long lparam, double dparam, string sparam){
    double m_price;
    int window=0;
    ChartXYToTimePrice(0,(int)lparam,(int)dparam,window,m_dt,m_price);
+   
+   if(Rm.InBuildMode()){
+      Rm.UpdateBuildMode(
+   ]
  
    string results[];
    FindObjectsAtTimePrice(m_dt,m_price,results);
@@ -220,6 +241,44 @@ void OnMouseMove(long lparam, double dparam, string sparam){
       }
       Hud.SetDialogMsg(msg);
    }
+}
+
+
+//+------------------------------------------------------------------+
+//| Mouse Input callback                                             |
+//+------------------------------------------------------------------+
+void OnMouseClick(long lparam, double dparam, string sparam) {
+   int subwindow, x=(int)lparam, y=(int)dparam;
+   datetime atTime;
+   double atPrice;
+   ChartXYToTimePrice(0,x,y,subwindow,atTime,atPrice);
+   
+   //void AddRange(Range *r);
+   //rm.AddRange(new Range(
+ 
+   if (subwindow != 0) {
+      Range_DeInit();
+   } else {
+      glbClicks[Range_drawLineMode].clickTimestamp=TimeGMT();
+      glbClicks[Range_drawLineMode].x = x;
+      glbClicks[Range_drawLineMode].y = y;
+      glbClicks[Range_drawLineMode].atTime=atTime;
+      glbClicks[Range_drawLineMode].atPrice=atPrice;
+      
+      if (Range_isDrawing) {
+          Range_drawLineMode++;
+          if (Range_drawLineMode == 1) {
+              CreateHLine("Line2", 0, 0, 0, clrTurquoise);
+          } else if (Range_drawLineMode == 2) {
+              Range_drawLineMode = 0;
+              Range_isDrawing = false;
+              hud.SetItemValue("draw_range", "R");
+              ObjectDelete(0, "Line1");
+              ObjectDelete(0, "Line2");
+          }
+      }
+   }
+
 }
 
 
