@@ -21,16 +21,24 @@ struct ClickHistory {
    datetime clickTimestamp;
 };
 
+struct Line {
+   int lshift, rshift;
+   double p1, p2;
+}
+
 
 // Class Declarations
 
 //---------------------------------------------------------------------------------+
 //|********************************* Range ****************************************|
 //---------------------------------------------------------------------------------+
-class Range {
+class RangeMatrix {
    private:
       string pair;
       ENUM_TIMEFRAMES period;
+      Line origin;                                 // Set of origin points used to generate matrix
+      double *primFibs[];                          // Primary fib range levels
+      double *secFibs[];                           // Secondary fib range levels (within each primary range)
       int shift_start;                             // Bar offset when range originated.
       double low, mid, high;                       // Levels
       int id;                                      // Timestamp unique ref
@@ -39,8 +47,8 @@ class Range {
       int line_ids[];                              // Handles to drawn line objects
       int order_id;                                // If currently in a trade
    public:
-      Range(string symbol, const ENUM_TIMEFRAMES period, int shift);
-      ~Range();
+      RangeMatrix(string symbol, const ENUM_TIMEFRAMES period, int shift);
+      ~RangeMatrix();
       bool IsActive();
       bool HasOpenPosition();
       bool NewZoneActive();                        // Current tick has moved price into new zone (buy/sell/tp,stop)
@@ -79,7 +87,7 @@ class RangeManager {
 // Class Definitions
 
 //----------------------------------------------------------------------------
-Range::Range(string symbol, const ENUM_TIMEFRAMES period, int shift){
+RangeMatrix::RangeMatrix(string symbol, const ENUM_TIMEFRAMES period, int shift){
    this.pair=symbol;
    this.shift=shift;
    this.id=(string)(long)iTime(NULL,0,this.shift);
@@ -96,7 +104,7 @@ Range::Range(string symbol, const ENUM_TIMEFRAMES period, int shift){
 }
 
 //----------------------------------------------------------------------------
-Range::~Range(){
+RangeMatrix::~RangeMatrix(){
    for(int i=0; i<ArraySize(this.line_ids); i++) {
       ObjectDelete(this.line_ids[i]);
    }
