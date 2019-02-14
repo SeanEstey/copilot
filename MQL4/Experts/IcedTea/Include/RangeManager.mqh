@@ -7,25 +7,19 @@
 #include "Draw.mqh"
 #include "Hud.mqh"
 
-
 // Globals
+const double fibs[5]={0.236, 0.382, 0.5, 0.618, 0.786};
 enum Zones {NONE, BUY_ZONE, SELL_ZONE, TP_ZONE, STOP_ZONE};
 
-// Structs
-string glbIndicatorTemporaryId;
-struct ClickHistory {
-   int x;
-   int y;
-   datetime atTime;
-   double atPrice;
-   datetime clickTimestamp;
-};
-
-struct Line {
-   int lshift, rshift;
-   double p1, p2;
+struct Pt {
+   int shift;
+   double price;
 }
 
+struct Line {
+   Pt p1;
+   Pt p2;
+}
 
 // Class Declarations
 
@@ -37,8 +31,8 @@ class RangeMatrix {
       string pair;
       ENUM_TIMEFRAMES period;
       Line origin;                                 // Set of origin points used to generate matrix
-      double *primFibs[];                          // Primary fib range levels
-      double *secFibs[];                           // Secondary fib range levels (within each primary range)
+      double *majorLvlSeq[];                       // Primary fib range levels
+      double *minorLvlSeq[];                       // Secondary fib range levels (within each primary range)
       int shift_start;                             // Bar offset when range originated.
       double low, mid, high;                       // Levels
       int id;                                      // Timestamp unique ref
@@ -62,11 +56,6 @@ class RangeManager {
    protected:
       Range *ranges[];
       Range* currentRange;
-      int buildModeClickCount;
-      ClickHistory clicks[2];
-      bool inBuildMode;
-      bool mouseMoveEnabled=true;
-      int drawLineMode;
       Hud* hud;
    public:
       RangeManager(Hud* hud);
