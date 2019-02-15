@@ -18,6 +18,7 @@ MQL4/Include/Tools/*
 MQL4/Indicators/*
 MQL4/Indicators/*.ex4
 MQL4/Experts/*.ex4
+MQL4/Experts/GuppyBot/*
 MQL4/Libraries/*
 MQL4/Presets/*
 MQL4/Projects/*
