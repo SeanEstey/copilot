@@ -3,6 +3,13 @@
 //|         This code comes as is and carries NO WARRANTY whatsoever |
 //|                                            Use at your own risk! |
 //+------------------------------------------------------------------+
+
+
+//--- Custom includes
+//#include "Experts/IcedTea/Logging.mqh"
+//#include "Experts/IcedTea/Utility.mqh"
+
+
 #property strict
 #property indicator_separate_window
 #property indicator_minimum 0
@@ -20,12 +27,13 @@
 #property indicator_color2  clrFireBrick
 #property indicator_style2  STYLE_SOLID
 #property indicator_width2  2
+
 //--- input parameters
-input int      Difference = 300;
+input int      Difference = 1000;      // Default:300
 input int      LabelShift = 150;
 input bool     ShowVolumeLabels = true;
 input int      DivBy = 1;
-input color    WaveColor  = clrWheat;
+input color    WaveColor  = clrBlueViolet;
 input int      WaveWidth  = 1;
 
 //--- indicator buffers
@@ -183,19 +191,20 @@ int OnCalculate(const int rates_total,
             }
          }
 
+         // Render volume annotations on candle
          if (ShowVolumeLabels == true) {
             string volLabel = "ED8847DC-" + TimeToString(time[waveChangeBar], TIME_DATE|TIME_MINUTES) + "-VOL";
             if (waveDirection[i] == 1) {
                ObjectCreate(0, volLabel, OBJ_TEXT, 0, time[waveChangeBar], low[waveChangeBar]-shift);
                ObjectSet(volLabel, OBJPROP_ANGLE, -0);
                ObjectSet(volLabel, OBJPROP_ANCHOR, ANCHOR_LEFT);
-               ObjectSetText(volLabel, DoubleToString(dnVolumeBuffer[waveChangeBar]/DivBy, 0), 8, NULL, clrLightPink);
+               ObjectSetText(volLabel, DoubleToString(dnVolumeBuffer[waveChangeBar]/DivBy, 0), 8, NULL, clrDarkRed);
             }
             else{
                ObjectCreate(0, volLabel, OBJ_TEXT, 0, time[waveChangeBar], high[waveChangeBar]+shift);
                ObjectSet(volLabel, OBJPROP_ANGLE, 0);
                ObjectSet(volLabel, OBJPROP_ANCHOR, ANCHOR_LEFT);
-               ObjectSetText(volLabel, DoubleToString(upVolumeBuffer[waveChangeBar]/DivBy, 0), 8, NULL, clrLightGreen);
+               ObjectSetText(volLabel, DoubleToString(upVolumeBuffer[waveChangeBar]/DivBy, 0), 8, NULL, clrDarkGreen);
             }
          }
       }

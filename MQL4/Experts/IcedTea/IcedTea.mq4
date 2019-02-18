@@ -15,8 +15,8 @@
 #include "Include/SwingPoints.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
-#include "Include/RangeDraw.mqh"
-#include "Include/RangeManager.mqh"
+//#include "Include/RangeDraw.mqh"
+//#include "Include/RangeManager.mqh"
 
 //--- Keyboard inputs
 #define KEY_L           76
@@ -28,7 +28,7 @@
 //--- Globals
 HUD* Hud                   = NULL;
 SwingGraph* Swings         = NULL;
-RangeManager* Rm           = NULL;
+//RangeManager* Rm           = NULL;
 bool ShowLevels            = false;
 bool ShowSwings            = true;
 
@@ -52,13 +52,13 @@ int OnInit() {
    Hud.SetDialogMsg("Hud created.");
    
    Swings = new SwingGraph();
-   Swings.DiscoverNodes(NULL,0,Bars-1,1);
-   Swings.UpdateNodeLevels(0);
-   Swings.FindNeighborRelationships();
-   //Swings.FindImpulseRelationships();
-   //Swings.FindOrderBlocks();
+   // Swings.DiscoverNodes(NULL,0,Bars-1,1);
+   // Swings.UpdateNodeLevels(0);
+   // Swings.FindNeighborRelationships();
+   // Swings.FindImpulseRelationships();
+   // Swings.FindOrderBlocks();
    
-   Rm=new RangeManager(Hud);
+   //Rm=new RangeManager(Hud);
    
    log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
@@ -71,7 +71,7 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
-   Range_DeInit();
+   //Range_DeInit();
    delete Hud;
    delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
@@ -88,14 +88,12 @@ void OnTick() {
    if(!NewBar())
       return;
    
-   log("tick");
+ 
    /*if(guiIsClicked(Hud.hWindow,Hud.CB1)){
       guiChangeSymbol(Hud.hWindow,"USDJPY");
    }*/
    
-   //Range_Update(Hud);
-   
-   Swings.UpdateNodeLevels(0);
+   //Swings.UpdateNodeLevels(0);
    //UpdateSwingPoints(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
    //UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
    //UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
@@ -136,7 +134,7 @@ void OnChartEvent(const int id,
    }
 }
 
-//+---------------------------------------------------------------------------+-
+//+---------------------------------------------------------------------------+
 //| OnCalculate() has been called already, and indicator destructor/constructor
 //| on change of TF.
 //+---------------------------------------------------------------------------+
@@ -164,7 +162,8 @@ void OnChartChange(long lparam, double dparam, string sparam) {
 void OnKeyPress(long lparam, double dparam, string sparam){
    switch((int)lparam){
       case KEY_ESC:
-         Rm.ToggleBuildMode(false);
+         //Rm.ToggleBuildMode(false);
+         break;
       case KEY_R: 
          /*Range_isDrawing = !Range_isDrawing;
          Range_drawLineMode = 0;
@@ -204,11 +203,7 @@ void OnMouseMove(long lparam, double dparam, string sparam){
    double m_price;
    int window=0;
    ChartXYToTimePrice(0,(int)lparam,(int)dparam,window,m_dt,m_price);
-   
-   if(Rm.InBuildMode()){
-      Rm.UpdateBuildMode(
-   ]
- 
+
    string results[];
    FindObjectsAtTimePrice(m_dt,m_price,results);
    if(ArraySize(results)>0){
@@ -252,14 +247,10 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
    datetime atTime;
    double atPrice;
    ChartXYToTimePrice(0,x,y,subwindow,atTime,atPrice);
-   
-   //void AddRange(Range *r);
-   //rm.AddRange(new Range(
  
    if (subwindow != 0) {
-      Range_DeInit();
    } else {
-      glbClicks[Range_drawLineMode].clickTimestamp=TimeGMT();
+      /*glbClicks[Range_drawLineMode].clickTimestamp=TimeGMT();
       glbClicks[Range_drawLineMode].x = x;
       glbClicks[Range_drawLineMode].y = y;
       glbClicks[Range_drawLineMode].atTime=atTime;
@@ -277,8 +268,8 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
               ObjectDelete(0, "Line2");
           }
       }
+      */
    }
-
 }
 
 

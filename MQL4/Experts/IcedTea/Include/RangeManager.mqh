@@ -83,7 +83,7 @@ RangeMatrix::RangeMatrix(string symbol, const ENUM_TIMEFRAMES period, int shift)
    
    for(int i=0; i<3; i++){
       //CreateHLine("range_"+this.id+"_hline_"+(string)(i+1),
-      +_"+(+this.id, ranges[i].rangeLow, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
+      //+_"+(+this.id, ranges[i].rangeLow, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
       //CreateHLine("Range" + (i+1) + "_High", ranges[i].rangeHigh, 0, 0, (i == 0) ? clrTurquoise : clrBlue, STYLE_SOLID, (i == 0) ? 2 : 1);
       //CreateHLine("Range" + (i+1) + "_Mid", ranges[i].rangeMid, 0, 0, clrGray, STYLE_DASH);      
       //ObjectSet("Range" + (i+1) + "_Low", OBJPROP_SELECTABLE, false);
