@@ -1,164 +1,233 @@
 //+---------------------------------------------------------------------------+
-//|                                                             FX/Orders.mq4 |
-//|                                                Copyright 2018, Sean Estey |      
+//|                                                                Orders.mq4 |      
 //+---------------------------------------------------------------------------+
-#property copyright "Copyright 2018, Sean Estey"
 #property strict
 
-//--- Custom includes
 #include "Logging.mqh"
 #include "Draw.mqh"
 
-double Lots             = 1.0;
-int    TakeProfit       = 75;   
-int    StopLoss         = 25;
+#define MAGICMA         9516235  
+#define LOTS            1.0
+#define TAKE_PROFIT     75
+#define STOP_LOSS       25
 
-//--- Globals
-int nTrades=0;
-int nPositions=0;
-int nStops=0;
-int nTakeProfit=0;
-string ntrades_lbl = "trades";
-string npos_lbl = "positions";
 string OrderTypes[6] = {"BUY", "SELL", "BUYLIMIT", "BUYSTOP", "SELLLIMIT", "SELLSTOP"};
-int SLOrders[];
-int TPOrders[];
-int Orders[];
-string ObjList[];
 
-double GetLots() {return Lots;}
-int CalculateCurrentOrders(string symbol) {return 1;}
 
+//----------------------------------------------------------------------------+
+//|****************************** OrderManager Class **************************
+//----------------------------------------------------------------------------+
+class OrderManager {
+   protected:
+      int Orders[], SLOrders[], TPOrders[];
+      int nTrades, nPositions, nStops, nTakeProfit;
+      string ntrades_lbl;
+      string npos_lbl;
+   public:
+      OrderManager();
+      ~OrderManager();
+      int OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=75, int sl=25);
+      void ClosePosition(int ticket);
+      void CloseAllPositions();
+      bool HasExistingPosition(string symbol, int otype);
+      int GetNumActiveOrders();
+      double GetProfit();
+      string GetHistoryStats();
+      string GetAcctStats();
+      string ToString();
+};
+
+
+//----------------------------------------------------------------------------+
+//|**************************** Method Definitions ****************************
+//----------------------------------------------------------------------------+
+
+
+//+---------------------------------------------------------------------------+
+OrderManager::OrderManager(){
+   ArrayResize(this.Orders,1);
+   ArrayResize(this.SLOrders,1);
+   ArrayResize(this.TPOrders,1);
+   this.ntrades_lbl="trades";
+   this.npos_lbl="positions";
+}
+
+//+---------------------------------------------------------------------------+
+OrderManager::~OrderManager(){
+   this.CloseAllPositions();
+}
+
+//+---------------------------------------------------------------------------+
+string OrderManager::ToString(){
+   return "OrderManager WRITEME";
+}
 
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-void CheckClosedOrders() {
-   int ticket;
-   for(int i=0; i<ArraySize(Orders); i++) {
-      ticket=Orders[i];
-      
-      if(!OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
+bool OrderManager::HasExistingPosition(string symbol, int otype){
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
          continue;
-      else if(OrderSymbol()!=Symbol() || OrderMagicNumber()!=MAGICMA)
+      if(OrderSymbol()==symbol || OrderMagicNumber()!=MAGICMA)
          continue;
-      
-      // Check if StopLoss was hit 
-      if(OrderStopLoss()==OrderClosePrice() || StringFind(OrderComment(), "[sl]", 0)!=-1){  
-         if(SLOrders[ArrayBsearch(SLOrders, ticket)] != ticket) {
-            log("Order #"+(string)ticket+" hit SL!");
-            CreateArrow((string)ticket+"_SL", Symbol(), OBJ_ARROW_STOP,
-               iBarShift(Symbol(),0,OrderCloseTime()), clrRed, ObjList);
-            ArrayResize(SLOrders,ArraySize(SLOrders)+1);
-            SLOrders[ArraySize(SLOrders)-1] = ticket;
-            ArraySort(SLOrders, WHOLE_ARRAY, 0, MODE_ASCEND);
-            
-            nStops++;
-            nPositions--;
-         }
+         
+      //double price=OrderType()==OP_BUY || OrderType()=
+   }
+   return false;
+}
+
+//+---------------------------------------------------------------------------+
+//| otype: OP_BUY,OP_SELL,OP_BUYLIMIT,OP_SELLLIMIT
+//+---------------------------------------------------------------------------+
+int OrderManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=75, int sl=25){
+   if(price==0.0)    
+      price=otype==OP_BUY? Ask: otype==OP_SELL? Bid: price;
+   
+   int oid=OrderSend(Symbol(),otype,lots,price,3,
+      otype==OP_BUY || otype==OP_BUYLIMIT? price-sl*Point*10: price+sl*Point*10,
+      otype==OP_BUY || otype==OP_BUYLIMIT? price+tp*Point*10: price-tp*Point*10,
+      "",MAGICMA,0,clrBlue
+   );
+   
+   if(oid==-1){
+      log("Error creating order. Reason: "+err_msg()+
+          "\nOrder Symbol:"+Symbol()+", minStopLevel:"+(string)MarketInfo(Symbol(), MODE_STOPLEVEL) + 
+          ", TP:"+(string)tp+", SL:"+(string)sl);
+      return -1;
+   }
+   
+   CreateArrow("order"+(string)oid, Symbol(), OBJ_ARROW_UP, 0, clrBlue);
+   this.Orders[ArraySize(this.Orders)-1] = oid;
+   ArraySort(this.Orders, WHOLE_ARRAY, 0, MODE_ASCEND);
+   ArrayResize(this.Orders,ArraySize(this.Orders)+1);
+   this.nTrades++;
+   this.nPositions++;
+   log("Order ID: "+(string)oid);   
+   return oid;
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+void OrderManager::ClosePosition(int ticket) {
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+         log("Could not retrieve order. "+err_msg());
+         continue;
       }
-      // Check if TakeProfit was hit
-      else if(OrderProfit()==OrderClosePrice() || StringFind(OrderComment(), "[tp]", 0)!=-1){
-         if(TPOrders[ArrayBsearch(TPOrders, ticket)] != ticket) {
-            CreateArrow((string)ticket+"_TP",Symbol(),OBJ_ARROW_CHECK,
-               iBarShift(Symbol(),0,OrderCloseTime()), clrGreen, ObjList);
-            ArrayResize(TPOrders,ArraySize(TPOrders)+1);
-            TPOrders[ArraySize(TPOrders)-1] = ticket;
-            ArraySort(TPOrders, WHOLE_ARRAY, 0, MODE_ASCEND);
-            
-            nTakeProfit++;
-            nPositions--;   
-            
-            log("Order #"+(string)ticket+" hit TP!");
+      if(OrderTicket()==ticket) {
+         double price=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? Bid : Ask;
+         if(!OrderClose(OrderTicket(),OrderLots(),price,3,clrBlue))
+            log("Error closing order "+(string)OrderTicket()+", Reason: "+err_msg());
+         else {
+            int obj=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? OBJ_ARROW_DOWN: OBJ_ARROW_UP;
+            CreateArrow((string)OrderTicket()+"_close", Symbol(),obj,0,clrRed);
+            this.nTrades++;
+            this.nPositions--;
          }
       }
    }
 }
 
 //+---------------------------------------------------------------------------+
-//|
+//| 
 //+---------------------------------------------------------------------------+
-void UpdateOpenPendingOrders() {
-   int res, action;
+void OrderManager::CloseAllPositions(){
+   int n_start=OrdersTotal();
    
    for(int i=0; i<OrdersTotal(); i++) {
-      // Load next open/pending order
-      bool is_selected = OrderSelect(i, SELECT_BY_POS, MODE_TRADES);      
-      if(!is_selected) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
          log("Could not retrieve order. "+err_msg());
          continue;
       }     
       if(OrderSymbol()!=Symbol() || OrderMagicNumber()!=MAGICMA)
          continue;
          
-      action = GetExitSignal();
+      double price=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? Bid : Ask;
       
-      if(action==0)
-         continue;
-      else if(action == 1) {
-         res=OrderClose(OrderTicket(), OrderLots(), Ask, 3, clrBlue);
-         CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_UP,0,clrRed, ObjList);
-      }
-      else if(action == -1) {
-         res=OrderClose(OrderTicket(), OrderLots(), Bid, 3, clrRed);
-         CreateArrow((string)OrderTicket()+"_close", Symbol(), OBJ_ARROW_DOWN,0, clrBlue, ObjList);
-      }
-      
-      if(res != 1)
+      if(!OrderClose(OrderTicket(),OrderLots(),price,3,clrBlue)){
          log("Error closing order "+(string)OrderTicket()+", Reason: "+err_msg());
+      }
       else {
-         log("Closed "+OrderTypes[OrderType()]+" order #"+(string)OrderTicket()+
-            ", Reason: StochRSI reset.");
-         nTrades++;
-         nPositions--;
+         int obj=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? OBJ_ARROW_DOWN: OBJ_ARROW_UP;
+         CreateArrow((string)OrderTicket()+"_close", Symbol(),obj,0,clrRed);
+         this.nTrades++;
+         this.nPositions--;
       }
    }
+   
+   int n_closed=n_start-OrdersTotal();
+   log("Closed "+(string)n_closed+" positions. Remaining:"+(string)OrdersTotal());
+}
+
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+int OrderManager::GetNumActiveOrders(){
+      int n_active=0;
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+         log("Could not retrieve order. "+err_msg());
+         continue;
+      }
+      if(OrderMagicNumber()==MAGICMA)
+         n_active++;
+   }
+   
+   log((string)n_active+" active orders.");
+   return n_active;
 }
 
 //+---------------------------------------------------------------------------+
-//| Evaluate new positions
+//| 
 //+---------------------------------------------------------------------------+
-void CreateNewOrders() {
-   int oid, type;
-   double TP=0.0, SL=0.0, price=0.0;
-   int signal = GetEntrySignal();
+double OrderManager::GetProfit(){
+   double profit=0.0;
    
-   if(signal==0) {
-      ObjectSetString(0,ntrades_lbl,OBJPROP_TEXT,"Trades:"+(string)nTrades);
-      ObjectSetString(0,npos_lbl,OBJPROP_TEXT,"Positions:"+(string)nPositions);
-      return;
-   }
-   else if(signal==1){  // Buy   
-      type=OP_BUY;
-      price = Bid;
-      TP = Bid + TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
-      SL = Bid - StopLoss*Point*10;
-      oid = OrderSend(Symbol(),type,GetLots(),Ask,3,SL,TP,"",MAGICMA,0,clrBlue);
+   for(int i=0; i<OrdersTotal(); i++) {
+      // MODE_TRADES (default)- order selected from trading pool(opened and pending orders),
+      // MODE_HISTORY - order selected from history pool (closed and canceled order).
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+         log("Could not retrieve order. "+err_msg());
+         continue;
+      }
+      if(OrderMagicNumber()!=MAGICMA)
+         continue;
       
-      CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_UP, 0, clrBlue, ObjList);
-      log("ObjList.size:"+(string)ArraySize(ObjList));
+      profit+=OrderProfit();
+      OrderPrint();   // Dumps to MT4 Terminal log
    }
-   else if(signal==-1){  // Sell
-      type=OP_SELL;
-      price = Ask;
-      TP = Ask - TakeProfit*Point*10;   //0.00001 * 10 = 0.0001
-      SL = Ask + StopLoss*Point*10;
-      
-      oid = OrderSend(Symbol(),type,GetLots(),Bid,3,SL,TP,"",MAGICMA,0,clrRed);
-      CreateArrow((string)oid+"_open", Symbol(), OBJ_ARROW_DOWN, 0, clrRed, ObjList);
+   log((string)OrdersTotal()+" active orders, $"+(string)profit+" profit.");
+   return profit;
+}
+
+//+---------------------------------------------------------------------------+
+//|
+//+---------------------------------------------------------------------------+
+string OrderManager::GetHistoryStats(){
+   // retrieving info from trade history 
+   int i,hstTotal=OrdersHistoryTotal(); 
+   for(i=0;i<hstTotal;i++){ 
+      if(OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==false){ 
+         Print("Access to history failed with error (",GetLastError(),")"); 
+         break; 
+      } 
    }
-   else {
-      log("Error creating "+(string)OrderType()+" order. Reason: "+err_msg()+
-          "\nOrder Symbol:"+Symbol()+", minStopLevel:"+(string)MarketInfo(Symbol(), MODE_STOPLEVEL) + 
-          ", TP:"+(string)TP+", SL:"+(string)SL);
-      return;
-   }
-   
-   Orders[ArraySize(Orders)-1] = oid;
-   ArraySort(Orders, WHOLE_ARRAY, 0, MODE_ASCEND);
-   ArrayResize(Orders,ArraySize(Orders)+1);
-   
-   nTrades++;
-   nPositions++;
-   log(OrderTypes[type]+" order #"+(string)oid+", Price:"+(string)price+", TP:"+(string)TP+", SL:"+(string)SL);
+   return "";
+}
+
+//+---------------------------------------------------------------------------+
+//|
+//+---------------------------------------------------------------------------+
+string OrderManager::GetAcctStats(){
+   log("*******************************************************");
+   log("Terminal Company: "+TerminalCompany()+", Name: "+TerminalName());
+   log("The name of the broker = ",AccountInfoString(ACCOUNT_COMPANY)); 
+   log("Deposit currency = ",AccountInfoString(ACCOUNT_CURRENCY)); 
+   log("Client name = ",AccountInfoString(ACCOUNT_NAME)); 
+   log("The name of the trade server = ",AccountInfoString(ACCOUNT_SERVER)); 
+   log("*******************************************************");
+   return "";
 }

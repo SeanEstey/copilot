@@ -36,15 +36,10 @@ struct Container{
 #define HUD_ITEM_COL_WIDTH       500
 #define HUD_ITEM_FONT_SIZE       9
 
-
-#include <mt4gui2.mqh>
 #include "Logging.mqh"
 #include "Utility.mqh"
 #include "Draw.mqh"
 
-// MT4 GUI Globals
-int ButtonWidth = 150;
-int ButtonHeight = 30;
 
 //-----------------------------------------------------------------------------+
 //|
@@ -83,8 +78,6 @@ class HUD {
       HudItem* Items[];
       int MaxRows;
       string title;
-      int hWindow;
-      int List1,CB1,CB2;
    public:
       //-----------------------------------------------------------------------+
       void HUD(string _title) {
@@ -106,36 +99,6 @@ class HUD {
             
          // Init MT4-GUI + Controls
          int yspacing=HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING;
-         this.hWindow=WindowHandle(Symbol(),Period());		
-      	guiRemoveAll(this.hWindow);            
-      	
-      	// CheckBoxes
-      	string lbl1="Hide Relationships";
-      	string lbl2="Hide Order Blocks";
-	      
-	      this.CB1=guiAdd(this.hWindow,"checkbox",900,40+yspacing,300,30,lbl1);
-	      this.CB2=guiAdd(this.hWindow,"checkbox",900,40+(yspacing*2),300,30,lbl2);
-	      
-	      guiSetText(this.hWindow,this.CB1,lbl1,32,"Arial");
-	      guiSetText(this.hWindow,this.CB2,lbl2,32,"Arial");
-	      
-	      guiSetTextColor(this.hWindow,this.CB1,White);				      
-	      guiSetTextColor(this.hWindow,this.CB2,White);
-	      
-         guiSetBgColor(this.hWindow,this.CB1,C'59,103,186');
-         guiSetBgColor(this.hWindow,this.CB2,C'59,103,186');
-	      
-	      // Dropdown Menu. "Height" argument seems to do nothing
-	      /*this.List1 = guiAdd(this.hWindow,"list",900,40+(yspacing*3),300,800,"List1"); 
-			guiAddListItem(this.hWindow,this.List1,"First List Item");
-			guiAddListItem(this.hWindow,this.List1,"Second List Item");
-			guiAddListItem(this.hWindow,this.List1,"Third List Item");
-			guiAddListItem(this.hWindow,this.List1,"Forth List Item");
-			guiAddListItem(this.hWindow,this.List1,"Fifth List Item");
-			guiSetListSel(this.hWindow,this.List1,0); 
-			guiSetBgColor(this.hWindow,this.List1,C'59,103,186');
-	      guiSetTextColor(this.hWindow,this.List1,White);*/
-	      
       }
       //-----------------------------------------------------------------------+
       void ~HUD(){
@@ -145,12 +108,7 @@ class HUD {
          ObjectDelete(0,"HudTitle");
          ObjectDelete(0,"HudDialogBox");
          ObjectDelete(0,"HudDialogLbl");
-         
-         // MT4 GUI library cleanup
-         if(this.hWindow>0){
-            guiRemoveAll(this.hWindow);
-            guiCleanup(this.hWindow); 
-         }
+    
       }
       //-----------------------------------------------------------------------+
       void AddItem(string name, string desc, string value){

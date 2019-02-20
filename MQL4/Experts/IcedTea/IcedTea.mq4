@@ -1,47 +1,50 @@
 //+------------------------------------------------------------------+
 //|                                                      IcedTea.mq4 |
-//|                                       Copyright 2018, Sean Estey |
-//|                                                                  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2018, Sean Estey"
-#define VERSION   "1.20"
-#property version VERSION
+
+#define VERSION "1.20"
 #property strict
 
 #include "Include/Logging.mqh"
 #include "Include/Utility.mqh"
 #include "Include/Chart.mqh"
 #include "Include/Graph.mqh"
+#include "Include/Orders.mqh"
 #include "Include/SwingPoints.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
-//#include "Include/RangeDraw.mqh"
-//#include "Include/RangeManager.mqh"
+#include "Algos/WeisCVD.mqh"
 
-//--- Keyboard inputs
+
 #define KEY_L           76
 #define KEY_R           82
 #define KEY_S           83
 #define KEY_ESC         27
 
+enum Algorithms {WEIS_CVD};
+
 
 //--- Globals
+Algorithms CurrentAlgo     = WEIS_CVD;
 HUD* Hud                   = NULL;
 SwingGraph* Swings         = NULL;
-//RangeManager* Rm           = NULL;
 bool ShowLevels            = false;
 bool ShowSwings            = true;
+OrderManager* OM           = NULL;
+
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 int OnInit() {
    log("********** IcedTea Initializing **********");
-   
    // Register Event Handlers
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
- 
    Hud = new HUD("IcedTea v"+VERSION);
+   Hud.AddItem("acct_name","Account","");
+   Hud.AddItem("acct_balance","Balance","");
+   Hud.AddItem("acct_pnl","Profit","");
+   Hud.AddItem("acct_ntrades","Active Trades","");
    Hud.AddItem("hud_hover_bar","Hover Bar","");
    Hud.AddItem("hud_window_bars","Bars","");
    Hud.AddItem("hud_highest_high","Highest High","");
@@ -50,19 +53,16 @@ int OnInit() {
    Hud.AddItem("hud_nodes", "Swing Nodes", "");
    Hud.AddItem("hud_node_links", "Node Links", "");
    Hud.SetDialogMsg("Hud created.");
-   
-   Swings = new SwingGraph();
+   OM = new OrderManager();
+   OM.GetAcctStats();
+   // Swings = new SwingGraph();
    // Swings.DiscoverNodes(NULL,0,Bars-1,1);
    // Swings.UpdateNodeLevels(0);
    // Swings.FindNeighborRelationships();
    // Swings.FindImpulseRelationships();
    // Swings.FindOrderBlocks();
-   
-   //Rm=new RangeManager(Hud);
-   
    log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
-   
    return(INIT_SUCCEEDED);
 }
 
@@ -71,7 +71,7 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
-   //Range_DeInit();
+   delete OM;
    delete Hud;
    delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
@@ -88,15 +88,15 @@ void OnTick() {
    if(!NewBar())
       return;
    
- 
-   /*if(guiIsClicked(Hud.hWindow,Hud.CB1)){
-      guiChangeSymbol(Hud.hWindow,"USDJPY");
-   }*/
-   
-   //Swings.UpdateNodeLevels(0);
-   //UpdateSwingPoints(Symbol(), 0, pos, 1, clrBlack, low, high, Lows, Highs, ChartObjs);
-   //UpdateSwingTrends(Symbol(),0,Highs,ChartObjs);
-   //UpdateSwingTrends(Symbol(),0,Lows,ChartObjs);
+   int signal=GetSignal();
+   if(signal==1){
+      OM.OpenPosition(NULL,OP_BUY);
+   }
+   else if(signal==-1){
+      OM.OpenPosition(NULL,OP_SELL);
+   }
+      
+   Hud.SetItemValue("acct_pnl",OM.GetProfit());
 }
 
 //+------------------------------------------------------------------+
@@ -151,8 +151,8 @@ void OnChartChange(long lparam, double dparam, string sparam) {
    datetime ll_time=iTime(Symbol(),0,ll_shift);
    Hud.SetItemValue("hud_lowest_low", DoubleToStr(ll,3)+" [Bar "+(string)(ll_shift+2)+"]"); 
    Hud.SetItemValue("hud_highest_high", DoubleToStr(hh,3)+" [Bar "+(string)(hh_shift+2)+"]");
-   Hud.SetItemValue("hud_nodes", (string)Swings.NodeCount());
-   Hud.SetItemValue("hud_node_links", (string)Swings.RelationshipCount());
+   //Hud.SetItemValue("hud_nodes", (string)Swings.NodeCount());
+   //Hud.SetItemValue("hud_node_links", (string)Swings.RelationshipCount());
    GetTrend();
 }
 
@@ -162,28 +162,15 @@ void OnChartChange(long lparam, double dparam, string sparam) {
 void OnKeyPress(long lparam, double dparam, string sparam){
    switch((int)lparam){
       case KEY_ESC:
-         //Rm.ToggleBuildMode(false);
          break;
       case KEY_R: 
-         /*Range_isDrawing = !Range_isDrawing;
-         Range_drawLineMode = 0;
-         hud.SetItemValue("draw_range_line", "(Drawing, left-click to place range)");
-         
-         if(Rm.inRange_isDrawing) {
-             Range_mouseMoveEnabled = true;
-             CreateHLine("Line1", 0.0, 0, 0, clrTurquoise);
-         }
-         else {
-             Range_mouseMoveEnabled = false;
-         }*/
          break;   
       case KEY_S: 
          break;
       case KEY_L: 
          break;
-         
       default:
-         //debuglog("Unmapped key:"+(string)lparam); 
+         //log("Unmapped key:"+(string)lparam); 
          break;
    } 
    ChartRedraw(); 
@@ -250,25 +237,7 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
  
    if (subwindow != 0) {
    } else {
-      /*glbClicks[Range_drawLineMode].clickTimestamp=TimeGMT();
-      glbClicks[Range_drawLineMode].x = x;
-      glbClicks[Range_drawLineMode].y = y;
-      glbClicks[Range_drawLineMode].atTime=atTime;
-      glbClicks[Range_drawLineMode].atPrice=atPrice;
-      
-      if (Range_isDrawing) {
-          Range_drawLineMode++;
-          if (Range_drawLineMode == 1) {
-              CreateHLine("Line2", 0, 0, 0, clrTurquoise);
-          } else if (Range_drawLineMode == 2) {
-              Range_drawLineMode = 0;
-              Range_isDrawing = false;
-              hud.SetItemValue("draw_range", "R");
-              ObjectDelete(0, "Line1");
-              ObjectDelete(0, "Line2");
-          }
-      }
-      */
+  
    }
 }
 
@@ -277,8 +246,7 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
 //| 
 //+---------------------------------------------------------------------------+
 int GetTrend(){
-
-   SwingRelationship* link1=Swings.GetRelationshipByIndex(Swings.RelationshipCount()-1);
+   /*SwingRelationship* link1=Swings.GetRelationshipByIndex(Swings.RelationshipCount()-1);
    SwingRelationship* link2=Swings.GetRelationshipByIndex(Swings.RelationshipCount()-2);
    
    MarketStructure d1=link1.Desc;
@@ -296,6 +264,7 @@ int GetTrend(){
       else
          Hud.SetItemValue("hud_trend", "Neutral");
    }
+   */
  
    //log("Last 2 SwingLink Descriptions:"+
    //   link1.ToString()+" (Lvl-"+(string)((SwingPoint*)link1.n2).Level+"), "+
