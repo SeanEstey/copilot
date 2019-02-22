@@ -11,30 +11,40 @@
 #define TAKE_PROFIT     75
 #define STOP_LOSS       25
 
-string OrderTypes[6] = {"BUY", "SELL", "BUYLIMIT", "BUYSTOP", "SELLLIMIT", "SELLSTOP"};
-
-
 //----------------------------------------------------------------------------+
-//|****************************** OrderManager Class **************************
+//|****************************** Order Class **************************
 //----------------------------------------------------------------------------+
-class OrderManager {
-   protected:
-      int Orders[], SLOrders[], TPOrders[];
-      int nTrades, nPositions, nStops, nTakeProfit;
-      string ntrades_lbl;
-      string npos_lbl;
+class Order {
+   public:   
+      string Symbol;
+      int Ticket;
+      int Type;         // enum: OP_BUY, OP_SELL, OP_BUYLIMIT, OP_SELLLIMIT
+      double Lots;
+      int Sl;           // Pips
+      int Tp;           // Pips
+      double Profit;
    public:
-      OrderManager();
-      ~OrderManager();
+      Order(int _ticket, string _symbol, int _otype, double _lots, int _sl, int tp, double _profit);
+      ~Order();
+};
+
+//----------------------------------------------------------------------------+
+//|****************************** TradeManager Class **************************
+//----------------------------------------------------------------------------+
+class TradeManager {
+   public:
+      TradeManager();
+      ~TradeManager();
+      int GetNumActiveOrders();
+      Order* GetActiveOrder();
+      double GetTotalProfit(bool unrealized=true);
+      string GetHistoryStats();
+      string GetAcctStats();
+      string ToString();
       int OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=75, int sl=25);
       void ClosePosition(int ticket);
       void CloseAllPositions();
       bool HasExistingPosition(string symbol, int otype);
-      int GetNumActiveOrders();
-      double GetProfit();
-      string GetHistoryStats();
-      string GetAcctStats();
-      string ToString();
 };
 
 
@@ -42,30 +52,82 @@ class OrderManager {
 //|**************************** Method Definitions ****************************
 //----------------------------------------------------------------------------+
 
-
 //+---------------------------------------------------------------------------+
-OrderManager::OrderManager(){
-   ArrayResize(this.Orders,1);
-   ArrayResize(this.SLOrders,1);
-   ArrayResize(this.TPOrders,1);
-   this.ntrades_lbl="trades";
-   this.npos_lbl="positions";
+Order::Order(int _ticket, string _symbol, int _otype, double _lots, int _sl, int _tp, double _profit){
+   this.Symbol=_symbol;
+   this.Ticket=_ticket;
+   this.Type=_otype;
+   this.Lots=_lots;
+   this.Sl=_sl;
+   this.Tp=_tp;
+   this.Profit=_profit;
 }
 
 //+---------------------------------------------------------------------------+
-OrderManager::~OrderManager(){
+Order::~Order(){
+}
+
+//+---------------------------------------------------------------------------+
+TradeManager::TradeManager(){
+}
+
+//+---------------------------------------------------------------------------+
+TradeManager::~TradeManager(){
    this.CloseAllPositions();
 }
 
 //+---------------------------------------------------------------------------+
-string OrderManager::ToString(){
-   return "OrderManager WRITEME";
+//| 
+//+---------------------------------------------------------------------------+
+int TradeManager::GetNumActiveOrders(){
+   int n_active=0;
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+         log("Could not retrieve order. "+err_msg());
+         continue;
+      }
+      if(OrderMagicNumber()==MAGICMA)
+         n_active++;
+   }
+   return n_active;
 }
 
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-bool OrderManager::HasExistingPosition(string symbol, int otype){
+Order* TradeManager::GetActiveOrder(void){
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+         log("Could not retrieve order. "+err_msg());
+         continue;
+      }
+      if(OrderMagicNumber()==MAGICMA){
+         Order* order=new Order(
+            OrderTicket(),
+            OrderSymbol(),
+            OrderType(),
+            OrderLots(),
+            0,              // WRITE_ME
+            0,              // WRITE_ME
+            OrderProfit()
+         );
+         return order;
+      }
+   }
+   log("No active order to return!");
+   return NULL;
+}
+
+
+//+---------------------------------------------------------------------------+
+string TradeManager::ToString(){
+   return "TradeManager WRITEME";
+}
+
+//+---------------------------------------------------------------------------+
+//|
+//+---------------------------------------------------------------------------+
+bool TradeManager::HasExistingPosition(string symbol, int otype){
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
          continue;
@@ -80,7 +142,7 @@ bool OrderManager::HasExistingPosition(string symbol, int otype){
 //+---------------------------------------------------------------------------+
 //| otype: OP_BUY,OP_SELL,OP_BUYLIMIT,OP_SELLLIMIT
 //+---------------------------------------------------------------------------+
-int OrderManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=75, int sl=25){
+int TradeManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=75, int sl=25){
    if(price==0.0)    
       price=otype==OP_BUY? Ask: otype==OP_SELL? Bid: price;
    
@@ -97,20 +159,17 @@ int OrderManager::OpenPosition(string symbol, int otype, double price=0.0, doubl
       return -1;
    }
    
-   CreateArrow("order"+(string)oid, Symbol(), OBJ_ARROW_UP, 0, clrBlue);
-   this.Orders[ArraySize(this.Orders)-1] = oid;
-   ArraySort(this.Orders, WHOLE_ARRAY, 0, MODE_ASCEND);
-   ArrayResize(this.Orders,ArraySize(this.Orders)+1);
-   this.nTrades++;
-   this.nPositions++;
-   log("Order ID: "+(string)oid);   
+   int arrow=otype==OP_BUY || otype==OP_BUYLIMIT? OBJ_ARROW_UP: OBJ_ARROW_DOWN;
+   int colour=otype==OP_BUY || otype==OP_BUYLIMIT? clrBlue: clrRed;
+   CreateArrow("order"+(string)oid, Symbol(), arrow, 0, colour);
+   log("Opened position (Ticket "+(string)oid+")");
    return oid;
 }
 
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-void OrderManager::ClosePosition(int ticket) {
+void TradeManager::ClosePosition(int ticket) {
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
          log("Could not retrieve order. "+err_msg());
@@ -123,8 +182,7 @@ void OrderManager::ClosePosition(int ticket) {
          else {
             int obj=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? OBJ_ARROW_DOWN: OBJ_ARROW_UP;
             CreateArrow((string)OrderTicket()+"_close", Symbol(),obj,0,clrRed);
-            this.nTrades++;
-            this.nPositions--;
+            log("Closed Position (Ticket "+(string)OrderTicket()+")");
          }
       }
    }
@@ -133,7 +191,7 @@ void OrderManager::ClosePosition(int ticket) {
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-void OrderManager::CloseAllPositions(){
+void TradeManager::CloseAllPositions(){
    int n_start=OrdersTotal();
    
    for(int i=0; i<OrdersTotal(); i++) {
@@ -152,8 +210,6 @@ void OrderManager::CloseAllPositions(){
       else {
          int obj=OrderType()==OP_BUY || OrderType()==OP_BUYLIMIT? OBJ_ARROW_DOWN: OBJ_ARROW_UP;
          CreateArrow((string)OrderTicket()+"_close", Symbol(),obj,0,clrRed);
-         this.nTrades++;
-         this.nPositions--;
       }
    }
    
@@ -161,35 +217,17 @@ void OrderManager::CloseAllPositions(){
    log("Closed "+(string)n_closed+" positions. Remaining:"+(string)OrdersTotal());
 }
 
-
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-int OrderManager::GetNumActiveOrders(){
-      int n_active=0;
-   for(int i=0; i<OrdersTotal(); i++) {
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
-         log("Could not retrieve order. "+err_msg());
-         continue;
-      }
-      if(OrderMagicNumber()==MAGICMA)
-         n_active++;
-   }
-   
-   log((string)n_active+" active orders.");
-   return n_active;
-}
-
-//+---------------------------------------------------------------------------+
-//| 
-//+---------------------------------------------------------------------------+
-double OrderManager::GetProfit(){
+double TradeManager::GetTotalProfit(bool unrealized=true){
    double profit=0.0;
    
    for(int i=0; i<OrdersTotal(); i++) {
       // MODE_TRADES (default)- order selected from trading pool(opened and pending orders),
       // MODE_HISTORY - order selected from history pool (closed and canceled order).
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
+      int pool=unrealized? MODE_TRADES: MODE_HISTORY;
+      if(!OrderSelect(i, SELECT_BY_POS, pool)){
          log("Could not retrieve order. "+err_msg());
          continue;
       }
@@ -199,14 +237,14 @@ double OrderManager::GetProfit(){
       profit+=OrderProfit();
       OrderPrint();   // Dumps to MT4 Terminal log
    }
-   log((string)OrdersTotal()+" active orders, $"+(string)profit+" profit.");
+   //log((string)OrdersTotal()+" active orders, $"+(string)profit+" profit.");
    return profit;
 }
 
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-string OrderManager::GetHistoryStats(){
+string TradeManager::GetHistoryStats(){
    // retrieving info from trade history 
    int i,hstTotal=OrdersHistoryTotal(); 
    for(i=0;i<hstTotal;i++){ 
@@ -221,13 +259,9 @@ string OrderManager::GetHistoryStats(){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-string OrderManager::GetAcctStats(){
-   log("*******************************************************");
-   log("Terminal Company: "+TerminalCompany()+", Name: "+TerminalName());
-   log("The name of the broker = ",AccountInfoString(ACCOUNT_COMPANY)); 
-   log("Deposit currency = ",AccountInfoString(ACCOUNT_CURRENCY)); 
-   log("Client name = ",AccountInfoString(ACCOUNT_NAME)); 
-   log("The name of the trade server = ",AccountInfoString(ACCOUNT_SERVER)); 
-   log("*******************************************************");
+string TradeManager::GetAcctStats(){
+   log("Account: "+AccountInfoString(ACCOUNT_NAME)+", Broker: "+AccountInfoString(ACCOUNT_COMPANY)); 
+   log("Server: "+AccountInfoString(ACCOUNT_SERVER)); 
+   log("Deposit currency = ",AccountInfoString(ACCOUNT_CURRENCY));
    return "";
 }

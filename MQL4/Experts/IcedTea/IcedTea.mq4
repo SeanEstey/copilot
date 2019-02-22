@@ -30,7 +30,7 @@ HUD* Hud                   = NULL;
 SwingGraph* Swings         = NULL;
 bool ShowLevels            = false;
 bool ShowSwings            = true;
-OrderManager* OM           = NULL;
+TradeManager* TM           = NULL;
 
 
 //+------------------------------------------------------------------+
@@ -42,9 +42,11 @@ int OnInit() {
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
    Hud = new HUD("IcedTea v"+VERSION);
    Hud.AddItem("acct_name","Account","");
-   Hud.AddItem("acct_balance","Balance","");
-   Hud.AddItem("acct_pnl","Profit","");
-   Hud.AddItem("acct_ntrades","Active Trades","");
+   Hud.AddItem("balance","Balance","");
+   Hud.AddItem("free_margin", "Available Margin","");
+   Hud.AddItem("unreal_pnl","Unrealized Profit","");
+   Hud.AddItem("real_pnl","Realized Profit","");
+   Hud.AddItem("ntrades","Active Trades","");
    Hud.AddItem("hud_hover_bar","Hover Bar","");
    Hud.AddItem("hud_window_bars","Bars","");
    Hud.AddItem("hud_highest_high","Highest High","");
@@ -52,15 +54,12 @@ int OnInit() {
    Hud.AddItem("hud_trend", "Swing Trend", "");
    Hud.AddItem("hud_nodes", "Swing Nodes", "");
    Hud.AddItem("hud_node_links", "Node Links", "");
+   Hud.SetItemValue("acct_name",AccountInfoString(ACCOUNT_NAME));
+   Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
+   Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetDialogMsg("Hud created.");
-   OM = new OrderManager();
-   OM.GetAcctStats();
-   // Swings = new SwingGraph();
-   // Swings.DiscoverNodes(NULL,0,Bars-1,1);
-   // Swings.UpdateNodeLevels(0);
-   // Swings.FindNeighborRelationships();
-   // Swings.FindImpulseRelationships();
-   // Swings.FindOrderBlocks();
+   TM = new TradeManager();
+   TM.GetAcctStats();
    log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
    return(INIT_SUCCEEDED);
@@ -71,7 +70,7 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
-   delete OM;
+   delete TM;
    delete Hud;
    delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
@@ -89,14 +88,41 @@ void OnTick() {
       return;
    
    int signal=GetSignal();
+   
+   // Buy signal
    if(signal==1){
-      OM.OpenPosition(NULL,OP_BUY);
+      // If currently short, close position.
+      if(TM.GetNumActiveOrders()>0){
+         Order* order=TM.GetActiveOrder();
+         if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT)
+            TM.ClosePosition(order.Ticket);
+      }
+      // Open long position
+      if(TM.GetNumActiveOrders()==0)
+         TM.OpenPosition(NULL,OP_BUY);
    }
+   // Sell signal
    else if(signal==-1){
-      OM.OpenPosition(NULL,OP_SELL);
+      // If currently long, close position
+      if(TM.GetNumActiveOrders()>0){
+         Order* order=TM.GetActiveOrder();
+         if(order.Type==OP_BUY || order.Type==OP_BUYLIMIT)
+            TM.ClosePosition(order.Ticket);
+      }
+      // Open short position
+      if(TM.GetNumActiveOrders()==0)
+         TM.OpenPosition(NULL,OP_SELL);
    }
       
-   Hud.SetItemValue("acct_pnl",OM.GetProfit());
+   Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
+   Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
+   Hud.SetItemValue("unreal_pnl",TM.GetTotalProfit(true));
+   Hud.SetItemValue("real_pnl",TM.GetTotalProfit(false));
+   Hud.SetItemValue("ntrades",TM.GetNumActiveOrders());
+   
+   log("OnTick(): "+(string)TM.GetNumActiveOrders()+" open position(s), "+
+      (string)TM.GetTotalProfit()+" Unrealized PNL, "+
+      (string)TM.GetTotalProfit(false)+" Realized PNL.");
 }
 
 //+------------------------------------------------------------------+
@@ -157,7 +183,7 @@ void OnChartChange(long lparam, double dparam, string sparam) {
 }
 
 //+---------------------------------------------------------------------------+
-//| Respond to custom keyboard shortcuts
+//| Respond to custTM keyboard shortcuts
 //+---------------------------------------------------------------------------+
 void OnKeyPress(long lparam, double dparam, string sparam){
    switch((int)lparam){
@@ -180,7 +206,6 @@ void OnKeyPress(long lparam, double dparam, string sparam){
 //| Draw crosshair, update HUD with relevent info.
 //+---------------------------------------------------------------------------+
 void OnMouseMove(long lparam, double dparam, string sparam){
-
    DrawCrosshair(lparam, (long)dparam);
    int m_bar=CoordsToBar((int)lparam, (int)dparam);
    Hud.SetItemValue("hud_hover_bar",(string)m_bar);
@@ -190,41 +215,7 @@ void OnMouseMove(long lparam, double dparam, string sparam){
    double m_price;
    int window=0;
    ChartXYToTimePrice(0,(int)lparam,(int)dparam,window,m_dt,m_price);
-
-   string results[];
-   FindObjectsAtTimePrice(m_dt,m_price,results);
-   if(ArraySize(results)>0){
-      string msg="";
-      for(int i=0; i<ArraySize(results); i++){
-         if(results[i]=="V_CROSSHAIR" || results[i]=="H_CROSSHAIR")
-            continue;
-         // Found a SwingPoint connection label. Write out the label text in full.
-         /*if(ObjectType(results[i])==OBJ_TEXT && StringFind(results[i],"link_text")>-1){
-            string text=ObjectGetString(0,results[i],OBJPROP_TEXT)+", ";
-            
-            if(StringFind(text,"HH")>-1)
-               msg+="Higher High";
-            else if(StringFind(text,"HL")>-1)
-               msg+="Higher Low";
-            else if(StringFind(text,"LL")>-1)
-               msg+="Lower Low";
-            else if(StringFind(text,"LH")>-1)
-               msg+="Lower High";
-               
-            string parts[];
-            ushort u_sep=StringGetCharacter(",",0); 
-            StringSplit(text,u_sep,parts);
-           // log(text+", u_sep:"+(string)u_sep+", parts.size:"+(string)ArraySize(parts));
-            msg+=", "+(string)parts[1]+" pips, "+(string)parts[2]+" bars.";
-         }
-         else
-            msg+=results[i]+", ";
-            */
-      }
-      Hud.SetDialogMsg(msg);
-   }
 }
-
 
 //+------------------------------------------------------------------+
 //| Mouse Input callback                                             |
@@ -234,11 +225,6 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
    datetime atTime;
    double atPrice;
    ChartXYToTimePrice(0,x,y,subwindow,atTime,atPrice);
- 
-   if (subwindow != 0) {
-   } else {
-  
-   }
 }
 
 
