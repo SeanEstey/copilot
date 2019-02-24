@@ -132,7 +132,9 @@ class HUD {
          return -1;         
       }
       //-----------------------------------------------------------------------+
-      void SetDialogMsg(string str){
+      void SetDialogMsg(string str, bool log=false){
          ObjectSetText("HudDialogLbl",str);
+         if(log==true)
+            log(str);
       }
 };

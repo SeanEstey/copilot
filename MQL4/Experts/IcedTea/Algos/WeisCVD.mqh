@@ -1,52 +1,94 @@
 //+------------------------------------------------------------------+
-//|                                                 Algos/Volume.mqh |
+//|                                                 Algos/WeisCVD.mqh |
 //+------------------------------------------------------------------+
 
 #property strict
 
-int cvd_length=14;
-bool cvd_combined=true;
-bool cvd_relative=false;
-int weis_diff=166;
-int weis_lblshift=150;
-bool weis_showlabels=true;
-int  weis_divby=1;
-color weis_wave_color=clrBlueViolet;
-int weis_wave_width=1;
+// Default indicator settings
+#define CVD_PATH           "IcedTea\\CVD"
+#define CVD_LENGTH         86
+#define CVD_COMBINED       TRUE
+#define CVD_RELATIVE       FALSE
 
+#define WEIS_PATH          "IcedTea\\WeisWave"
+#define WEIS_DIFF          1000
+#define WEIS_LBLSHIFT      150
+#define WEIS_SHOWLABELS    TRUE
+#define WEIS_DIVBY         1
+#define WEIS_WAVE_COLOR    clrBlueViolet
+#define WEIS_WAVE_WIDTH    1
+
+int last_weis=0;
+enum Signals {NONE, OPEN_LONG, CLOSE_LONG, OPEN_SHORT, CLOSE_SHORT};
 
 //+------------------------------------------------------------------+
-//| Returns: 1 for buy signal, -1 for short signal, 0 for no signal. |                                                                  |
+//| Returns: Signal enum
 //+------------------------------------------------------------------+
 int GetSignal(){
-   cvd_length=cvd_length * (3600*24 / PeriodSeconds());
-   weis_diff=weis_diff * (3600*24 / PeriodSeconds());
-   
    // CVD Buffers: 0:Cum, 1:Pos, 2:Neg, 3:APos, 4:ANeg
-   double cvdcum=iCustom(NULL,0,"IcedTea\\CVD",cvd_length,cvd_combined,cvd_relative,0,0);
-   double cvdpos=iCustom(NULL,0,"IcedTea\\CVD",cvd_length,cvd_combined,cvd_relative,1,0);
-   double cvdneg=iCustom(NULL,0,"IcedTea\\CVD",cvd_length,cvd_combined,cvd_relative,2,0);
+   int cvdlen=CVD_LENGTH;// * (3600*24 / PeriodSeconds());
+   double cvdcum=iCustom(NULL,0,CVD_PATH,cvdlen,CVD_COMBINED,CVD_RELATIVE,0,0);
+   double last_cvd=iCustom(NULL,0,CVD_PATH,cvdlen,CVD_COMBINED,CVD_RELATIVE,0,1);
+   double cvdpos=iCustom(NULL,0,CVD_PATH,cvdlen,CVD_COMBINED,CVD_RELATIVE,1,0);
+   double cvdneg=iCustom(NULL,0,CVD_PATH,cvdlen,CVD_COMBINED,CVD_RELATIVE,2,0);
    
+   int weis=WeisWaveHeight(0);
+   
+   if(last_weis==0)
+      last_weis=weis;
+      
+
+   if((weis>0 && last_weis<0) || (weis<0 && last_weis>0)){
+       CreateVLine("WeisWave"+(string)Bars,0,0,0,clrBlue);
+   }
+   
+   
+   if(weis>0 && last_weis<0 && last_cvd>cvdcum){
+      log("OPEN_LONG. New UpWave ("+(string)weis+") and Pos CVD ("+(string)cvdcum+")");
+      last_weis=weis;
+      return OPEN_LONG;
+   }
+   else if(weis<0 && last_weis>0 && last_cvd<cvdcum){
+      log("OPEN_SHORT: New DownWave ("+(string)weis+") but Pos CVD ("+(string)cvdcum+")");
+      last_weis=weis;
+      return OPEN_SHORT;
+   }
+  /* else if(weis<0 && last_weis>0 && cvdcum<0){
+      log("OPEN_SHORT: New DownWave ("+(string)weis+") and Neg CVD ("+(string)cvdcum+")");
+      last_weis=weis;
+      return OPEN_SHORT;
+   }
+   else if(weis>0 && last_weis<0 && cvdcum<0){
+      log("CLOSE_SHORT. New UpWave ("+(string)weis+") but Neg CVD ("+(string)cvdcum+")");
+      last_weis=weis;
+      return CLOSE_SHORT;
+   } */  /*
+   // Prior Weis UpWave + CVD flips positive
+   else if(weis>0 && last_weis>0 && cvdcum>0 && last_cvd<0){
+      log("OPEN_LONG: CVD flipped positive ("+(string)cvdcum+")");
+      last_weis=weis;
+      return OPEN_LONG;
+   }
+   // Prior Weis DownWave + CVD flips negative
+   else if(weis<0 && last_weis<0 && cvdcum<0 && last_cvd>0){
+      log("OPEN_SHORT: CVD flipped negative ("+(string)cvdcum+")");
+      last_weis=weis;
+      return OPEN_SHORT;
+   }*/
+   last_weis=weis;
+   return NONE;
+}
+
+int WeisWaveDir(int shift){
    // Weis Buffers: 0:Up, 1:Down, 2:BarDir, 3:TrendDir, 4:WaveDir
-   double up=iCustom(NULL,0,"IcedTea\\WeisWave",weis_diff,weis_lblshift,weis_showlabels,weis_divby,weis_wave_color,weis_wave_width,0,0); 
-   double down=iCustom(NULL,0,"IcedTea\\WeisWave",weis_diff,weis_lblshift,weis_showlabels,weis_divby,weis_wave_color,weis_wave_width,1,0); 
-   double bardir=iCustom(NULL,0,"IcedTea\\WeisWave",weis_diff,weis_lblshift,weis_showlabels,weis_divby,weis_wave_color,weis_wave_width,2,0);    
-   double trenddir=iCustom(NULL,0,"IcedTea\\WeisWave",weis_diff,weis_lblshift,weis_showlabels,weis_divby,weis_wave_color,weis_wave_width,3,0);    
-   double wavedir=iCustom(NULL,0,"IcedTea\\WeisWave",weis_diff,weis_lblshift,weis_showlabels,weis_divby,weis_wave_color,weis_wave_width,4,0); 
-   
-   log("CVD:"+(string)cvdcum+" (Setting:"+(string)cvd_length+") "+
-      "WeisWave:"+(up>0? (string)up: (string)down)+" (Setting:"+(string)weis_diff+")");
-   
-   if(cvdcum > 0 && wavedir > 0){
-      log("Buy signal");
-      return 1;
-   }
-   
-   if(cvdcum < 0 && wavedir < 0){
-      log("Sell signal");
-      return -1;
-   }
-   
-   log("No signal");
-   return 0;
+   return iCustom(NULL,0,WEIS_PATH,WEIS_DIFF,WEIS_LBLSHIFT,WEIS_SHOWLABELS,WEIS_DIVBY,WEIS_WAVE_COLOR,WEIS_WAVE_WIDTH,4,shift); 
+}
+
+int WeisWaveHeight(int shift){
+   // Weis Buffers: 0:Up, 1:Down, 2:BarDir, 3:TrendDir, 4:WaveDir
+   if(WeisWaveDir(shift)<0)
+      return -1*iCustom(NULL,0,WEIS_PATH,WEIS_DIFF,WEIS_LBLSHIFT,WEIS_SHOWLABELS,WEIS_DIVBY,WEIS_WAVE_COLOR,WEIS_WAVE_WIDTH,1,shift); 
+   else if(WeisWaveDir(shift)>0)
+      return iCustom(NULL,0,WEIS_PATH,WEIS_DIFF,WEIS_LBLSHIFT,WEIS_SHOWLABELS,WEIS_DIVBY,WEIS_WAVE_COLOR,WEIS_WAVE_WIDTH,0,shift); 
+   return 0;   
 }
