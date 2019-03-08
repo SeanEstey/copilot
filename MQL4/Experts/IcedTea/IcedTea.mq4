@@ -11,7 +11,7 @@
 #include "Include/TradeManager.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
-#include "Algos/WeisCVD.mqh"
+#include "Algos/SR.mqh"
 
 #define KEY_L           76
 #define KEY_R           82
@@ -25,10 +25,6 @@ enum Algorithms {WEIS_CVD};
 Algorithms CurrentAlgo     = WEIS_CVD;
 HUD* Hud                   = NULL;
 TradeManager* TM           = NULL;
-
-
-
-
 
 
 //+------------------------------------------------------------------+
@@ -60,6 +56,9 @@ int OnInit() {
    TM.GetAcctStats();
    log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
+   ScanLevels(30);
+   
+   
    return(INIT_SUCCEEDED);
 }
 
