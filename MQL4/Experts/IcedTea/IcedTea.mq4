@@ -54,8 +54,9 @@ int OnInit() {
    Hud.SetDialogMsg("Hud created.");
    TM = new TradeManager();
    TM.GetAcctStats();
-   log("********** All systems check. **********");
+   //log("********** All systems check. **********");
    Hud.SetDialogMsg("All systems check.");
+   log("inrange():"+(string)InRange(5.555,5.556,0.001));
    ScanLevels(30);
    
    
