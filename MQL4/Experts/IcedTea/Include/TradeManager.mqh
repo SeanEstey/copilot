@@ -40,6 +40,7 @@ class TradeManager {
       double GetTotalProfit(bool unrealized=true);
       string GetHistoryStats();
       string GetAcctStats();
+      void GetAssetStats();
       string ToString();
       int OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=TAKE_PROFIT, int sl=STOP_LOSS);
       int ClosePosition(int ticket);
@@ -306,8 +307,28 @@ string TradeManager::GetHistoryStats(){
 //|
 //+---------------------------------------------------------------------------+
 string TradeManager::GetAcctStats(){
-   log("Account: "+AccountInfoString(ACCOUNT_NAME)+", Broker: "+AccountInfoString(ACCOUNT_COMPANY)); 
+   log("***** Trading Account *****");
+   log("Account: "+AccountInfoString(ACCOUNT_NAME));
+   log("Broker: "+AccountInfoString(ACCOUNT_COMPANY)); 
    log("Server: "+AccountInfoString(ACCOUNT_SERVER)); 
-   log("Deposit currency = ",AccountInfoString(ACCOUNT_CURRENCY));
+   //log("Deposit currency = ",AccountInfoString(ACCOUNT_CURRENCY));
+   log("");
    return "";
+}
+
+//+---------------------------------------------------------------------------+
+//|
+//+---------------------------------------------------------------------------+
+void TradeManager::GetAssetStats(){
+   log("***** Asset Info *****");
+   log("Symbol: "+Symbol());
+   log("Desc: "+SymbolInfoString(Symbol(),SYMBOL_DESCRIPTION));
+   log("Point: "+(string)MarketInfo(Symbol(),MODE_POINT));
+   log("Digits: "+(string)MarketInfo(Symbol(),MODE_DIGITS));
+   log("Bid: "+(string)MarketInfo(Symbol(),MODE_BID));
+   log("Ask: "+(string)MarketInfo(Symbol(),MODE_ASK));
+   log("Spread: "+(string)MarketInfo(Symbol(),MODE_SPREAD));
+   log("Min Lot: "+(string)MarketInfo(Symbol(),MODE_MINLOT));
+   log("Trading Enabled: "+(MarketInfo(Symbol(),MODE_TRADEALLOWED)==1? "YES": "NO"));
+   log("");
 }

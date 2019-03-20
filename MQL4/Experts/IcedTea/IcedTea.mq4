@@ -8,6 +8,8 @@
 #include "Include/Logging.mqh"
 #include "Include/Utility.mqh"
 #include "Include/Chart.mqh"
+#include "Include/Graph.mqh"
+#include "Include/SwingPoints.mqh"
 #include "Include/TradeManager.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
@@ -23,6 +25,7 @@ enum Algorithms {WEIS_CVD};
 
 //--- Globals
 Algorithms CurrentAlgo     = WEIS_CVD;
+SwingGraph* Swings         = NULL;
 HUD* Hud                   = NULL;
 TradeManager* TM           = NULL;
 
@@ -31,9 +34,9 @@ TradeManager* TM           = NULL;
 //|                                                                  |
 //+------------------------------------------------------------------+
 int OnInit() {
-   log("********** IcedTea Initializing **********");
    // Register Event Handlers
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
+   
    Hud = new HUD("IcedTea v"+VERSION);
    Hud.AddItem("acct_name","Account","");
    Hud.AddItem("balance","Balance","");
@@ -52,13 +55,15 @@ int OnInit() {
    Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
    Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetDialogMsg("Hud created.");
+   
    TM = new TradeManager();
    TM.GetAcctStats();
-   //log("********** All systems check. **********");
-   Hud.SetDialogMsg("All systems check.");
-   log("inrange():"+(string)InRange(5.555,5.556,0.001));
-   ScanLevels(30);
+   TM.GetAssetStats();
    
+   Swings = new SwingGraph();
+   Swings.DiscoverNodes(NULL,0,1000,1);
+   Swings.UpdateNodeLevels(0); 
+   GenerateSR(Swings);  
    
    return(INIT_SUCCEEDED);
 }
@@ -70,9 +75,13 @@ void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    delete TM;
    delete Hud;
+   delete Swings;
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR); 
-   //int n=ObjectsDeleteAll();
+   int n=ObjectsDeleteAll();
+   log("EA Terminated.");
+   log("");
+  
    //log("********** IcedTea Deinit. Deleted "+(string)n+" objects. **********");
    return;
 }
@@ -84,8 +93,10 @@ void OnTick() {
    if(!NewBar())
       return;
    
-   int signal=GetSignal();
+   Swings.UpdateNodeLevels(0);
    
+   int signal=GetSignal();
+   /*
    // Close short positions (if any) and open a long.
    if(signal==OPEN_LONG){
       if(TM.GetNumActiveOrders()>0){ 
@@ -123,15 +134,15 @@ void OnTick() {
          TM.ClosePosition(order.Ticket);
          Hud.SetDialogMsg("Closed Short.",false);
       }
-   }
+   }*/
    
    
    TM.UpdateClosedPositions(); 
    Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
-   Hud.SetItemValue("unreal_pnl",TM.GetTotalProfit(true));
-   Hud.SetItemValue("real_pnl",TM.GetTotalProfit(false));
-   Hud.SetItemValue("ntrades",TM.GetNumActiveOrders());
+   Hud.SetItemValue("unreal_pnl",(string)TM.GetTotalProfit(true));
+   Hud.SetItemValue("real_pnl",(string)TM.GetTotalProfit(false));
+   Hud.SetItemValue("ntrades",(string)TM.GetNumActiveOrders());
    
    //log("OnTick(): "+(string)TM.GetNumActiveOrders()+" open position(s), "+
    //   (string)TM.GetTotalProfit()+" Unrealized PNL, "+
