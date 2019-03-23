@@ -12,126 +12,90 @@
 enum Signals {NONE, OPEN_LONG, CLOSE_LONG, OPEN_SHORT, CLOSE_SHORT};
 
 #define TEXT_OFFSET     0
-#define LVL_GROUP_DIST  400
-
+#define LVL_GROUP_DIST  100
+#define SR_LINE_COLOR   clrRed
+#define SR_LINE_WIDTH   2
+#define SR_ZONE_COLOR   clrLightPink
 
 enum CandleRegion {ANY_REGION, WICK_AREA, LOW_OR_HIGH, BODY_AREA, OPEN_OR_CLOSE};       //OHLC
 enum CollisionVector {FROM_ANYWHERE, FROM_ABOVE, FROM_BELOW};
 enum MatchType {COLLISION, CLOSED_BEYOND};
 
-
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
+//+---------------------------------------------------------------------------+
+//| Draws SR level trendlines/zones + hit rate stats                          |
+//+---------------------------------------------------------------------------+
 int GenerateSR(SwingGraph* Swings){
-   int srnodes[];
-   double levels[];
+   double levels[][2];        // 2D-array, each element containing array of {price,nodeIndex}
+   ArrayResize(levels,Swings.NodeCount());
    
    for(int i=0; i<Swings.NodeCount(); i++){
       SwingPoint* sp=Swings.GetNode(i);
-      if(sp.MyLevel==LONG){
-         appendIntArray(srnodes,i);
-         appendDoubleArray(levels,sp.GetValue());
-      }
-   }
-   
-   ArraySort(levels,WHOLE_ARRAY,0,MODE_ASCEND);
-   
-   for(int i=0; i<ArraySize(levels); i++){
-      double grouplvls[];
-      
-      if(levels[i]==0)
+      if(sp.MyLevel!=LONG)
          continue;
       
-      appendDoubleArray(grouplvls,levels[i]);
+      levels[i][0]=sp.GetValue();
+      levels[i][1]=i;
+   }
+   ArraySort(levels,WHOLE_ARRAY,0,MODE_ASCEND); // Sort by price levels
+   
+   // Group + Draw SR level trendlines/zones
+   for(int i=0; i<ArrayRange(levels,0); i++){
+      double group[];
       
-      for(int j=i+1; j<ArraySize(levels); j++){
-         if(levels[j]==0)
+      if(levels[i][0]==0.0)
+         continue;
+      appendDoubleArray(group,levels[i][1]);
+         
+      log("levels["+(string)i+"]: "+DoubleToStr(levels[i][0]));
+      
+      // Group levels with close proximity
+      for(int j=i+1; j<ArrayRange(levels,0); j++){
+         if(levels[j][0]==0)
             continue;
-         if(MathAbs(ToPips(levels[i])-ToPips(levels[j])) < LVL_GROUP_DIST){
-            appendDoubleArray(grouplvls,levels[j]);
-            levels[j]=0;
+         if(MathAbs(ToPips(levels[i][0])-ToPips(levels[j][0])) < LVL_GROUP_DIST){
+            appendDoubleArray(group,levels[j][1]);
+            levels[j][0]=0;
          }
       }
-    
       
-      if(ArraySize(grouplvls)==1){
-         CreateTrendline("SR_"+(string)i,1000,grouplvls[0],iTime(NULL,0,0),grouplvls[0],0,clrRed,STYLE_SOLID,1,true,false,true,0);   
-      //   CreateRect((string)grouplvls[0]+"_rect",
-      //      iTime(NULL,0,1000),grouplvls[0],iTime(NULL,0,0),grouplvls[0]+(Point*5),0,0,clrRed,STYLE_SOLID,1,true,true,true,true,0); 
-      }
-      else if(ArraySize(grouplvls)>1){
-         ArraySort(grouplvls,WHOLE_ARRAY,0,MODE_ASCEND);
-         CreateRect((string)grouplvls[0]+"_rect",
-            iTime(NULL,0,1000),grouplvls[0],iTime(NULL,0,0),grouplvls[ArraySize(grouplvls)-1],0,0,clrLightPink,STYLE_SOLID,1,true,true,true,true,0); 
-      }
-      ArrayResize(grouplvls,1);
-   }
-   
-   for(int i=0; i<ArraySize(srnodes); i++){
-      int srgroup[];
-      SwingPoint* sp_a=(SwingPoint*)Swings.GetNode(srnodes[i]);
-   
-      for(int j=0; j<ArraySize(srnodes); j++){
-         if(i==j)
-            continue;
-         SwingPoint* sp_b=(SwingPoint*)Swings.GetNode(srnodes[j]);
-         double dist=MathAbs(ToPips(sp_a.GetValue())-ToPips(sp_b.GetValue()));
-         
-         if(dist<100)
-            appendIntArray(srgroup,j);      
-      }
-   }
-      
-   // log("Bar "+(string)sp_a.Shift+" - Bar "+(string)sp_b.Shift+" height: "+DoubleToStr(MathAbs(a-b),0));
-   
-   for(int i=0; i<ArraySize(srnodes); i++){
-      SwingPoint* sp=Swings.GetNode(srnodes[i]);
+      // Evaluate historic hit rate of SR level
+      SwingPoint* sp=Swings.GetNode(group[0]);
       double p=sp.Type==LOW? sp.L: sp.H;
-      string lbl="";
-      bool draw=false;
+      int s_misses=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_ABOVE);
+      int r_misses=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_BELOW);
+      int s_hits=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_ABOVE);
+      int r_hits=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_BELOW);
       
-      int n_ignored=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_ABOVE);
-      n_ignored+=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_BELOW);
-      int n_res_retests=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_BELOW);
-      int n_sup_retests=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_ABOVE);
-        
-      // Untested?
-      if(n_ignored==0 && n_res_retests==0 && n_sup_retests==0){
-         lbl+="Untested ";
-         draw=true;
+      // Draw ungrouped levels as trendline
+      if(ArraySize(group)==1){
+         SwingPoint* _sp=Swings.GetNode(group[0]);
+         CreateTrendline("SR_"+(string)i,iTime(NULL,0,0),
+            _sp.GetValue(),iTime(NULL,0,_sp.Shift),_sp.GetValue(),0,
+            SR_LINE_COLOR,STYLE_SOLID,SR_LINE_WIDTH,
+            true,false,true,0);
+      }
+      // Draw grouped levels as rectangular zone
+      else if(ArraySize(group)>1){
+         double prices[];
+         datetime dt[];
+         for(int k=0; k<ArraySize(group); k++){
+            SwingPoint* _sp=Swings.GetNode(group[k]);
+            appendDoubleArray(prices,_sp.GetValue());
+            appendDtArray(dt,_sp.DT);
+         }
+         CreateRect((string)group[0]+"_rect", 
+            dt[ArrayMinimum(dt,WHOLE_ARRAY,0)],
+            prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],
+            iTime(NULL,0,0),
+            prices[ArrayMinimum(prices,WHOLE_ARRAY,0)],
+            0,0,SR_ZONE_COLOR,STYLE_SOLID,1,true,true,true,true,0
+         ); 
       }
       
-      // Test if level has been flipped from R-->S (no down candles from above have broken below)
-      if(sp.Type==HIGH){
-         draw=true;
-         /*int nflips=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_ABOVE);
-         int nbroken=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_ABOVE);
-         if(nflips>0 && nbroken==0){
-            CreateTrendline("SR_"+(string)i, sp.DT,p,iTime(NULL,0,0),p,0,clrRed,STYLE_SOLID,3,true,false,true,0);
-            CreateText("SR_lbl_"+(string)i,"SR Flip. Tests: "+(string)nflips,5,ANCHOR_LOWER,p,iTime(NULL,0,TEXT_OFFSET),0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
-         }*/
-      }
-      // Test if level has been flipped from S-->R (no up candles from below have broken above)
-      else if(sp.Type==LOW){
-         draw=true;
-         /*
-         int nflips=CountLevelHits(p, sp.Shift, 1, WICK_AREA, COLLISION, FROM_BELOW);
-         int nbroken=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_BELOW);
-         if(nflips>0 && nbroken==0){
-            CreateTrendline("SR_"+(string)i, sp.DT,p,iTime(NULL,0,0),p,0,clrRed,STYLE_SOLID,3,true,false,true,0);
-            CreateText("SR_lbl_"+(string)i, "SR Flip. Tests: "+(string)nflips,
-               5,ANCHOR_LOWER,p,iTime(NULL,0,TEXT_OFFSET),0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
-         }*/
-      }
-      
-      if(draw){
-         lbl+=sp.GetValue()<iClose(NULL,0,0)?"Support. ": "Resistance. ";
-         lbl+=" Ignored:"+(string)n_ignored+", Tests:"+(string)(n_sup_retests+n_res_retests);
-         //CreateTrendline("SR_"+(string)i,sp.DT,p,iTime(NULL,0,0),p,0,clrBlack,STYLE_SOLID,3,true,false,true,0);   
-         CreateText("SR_lbl_"+(string)i,lbl,0,ANCHOR_LOWER,p,0,0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
-      }
-      
-      log("Level: "+DoubleToStr(p,3)+". "+lbl);
+      // Print SR level label
+      string lbl="Misses:"+(string)(s_misses+r_misses)+", Hits:"+(string)(s_hits+r_hits);
+      CreateText("SR_lbl_"+(string)i,lbl,
+         0,ANCHOR_LOWER,p,0,0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
    }
    return 1;
 }

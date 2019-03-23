@@ -20,6 +20,7 @@
 #define KEY_S           83
 #define KEY_ESC         27
 
+
 enum Algorithms {WEIS_CVD};
 
 
