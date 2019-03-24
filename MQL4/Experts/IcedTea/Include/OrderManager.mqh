@@ -1,5 +1,5 @@
 //+---------------------------------------------------------------------------+
-//|                                                  Include/TradeManager.mq4 |      
+//|                                                  Include/OrderManager.mq4 |      
 //+---------------------------------------------------------------------------+
 #property strict
 
@@ -29,12 +29,12 @@ class Order {
 };
 
 //----------------------------------------------------------------------------+
-//|****************************** TradeManager Class **************************
+//|****************************** OrderManager Class **************************
 //----------------------------------------------------------------------------+
-class TradeManager {
+class OrderManager {
    public:
-      TradeManager();
-      ~TradeManager();
+      OrderManager();
+      ~OrderManager();
       int GetNumActiveOrders();
       Order* GetActiveOrder();
       double GetTotalProfit(bool unrealized=true);
@@ -70,18 +70,18 @@ Order::~Order(){
 }
 
 //+---------------------------------------------------------------------------+
-TradeManager::TradeManager(){
+OrderManager::OrderManager(){
 }
 
 //+---------------------------------------------------------------------------+
-TradeManager::~TradeManager(){
+OrderManager::~OrderManager(){
    this.CloseAllPositions();
 }
 
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-int TradeManager::GetNumActiveOrders(){
+int OrderManager::GetNumActiveOrders(){
    int n_active=0;
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
@@ -97,7 +97,7 @@ int TradeManager::GetNumActiveOrders(){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-Order* TradeManager::GetActiveOrder(void){
+Order* OrderManager::GetActiveOrder(void){
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
          log("GetActiveOrder(): Could not retrieve order. "+err_msg());
@@ -122,14 +122,14 @@ Order* TradeManager::GetActiveOrder(void){
 
 
 //+---------------------------------------------------------------------------+
-string TradeManager::ToString(){
-   return "TradeManager WRITEME";
+string OrderManager::ToString(){
+   return "OrderManager WRITEME";
 }
 
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-bool TradeManager::HasExistingPosition(string symbol, int otype){
+bool OrderManager::HasExistingPosition(string symbol, int otype){
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
          continue;
@@ -144,7 +144,7 @@ bool TradeManager::HasExistingPosition(string symbol, int otype){
 //+---------------------------------------------------------------------------+
 //| otype: OP_BUY,OP_SELL,OP_BUYLIMIT,OP_SELLLIMIT
 //+---------------------------------------------------------------------------+
-int TradeManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=TAKE_PROFIT, int sl=STOP_LOSS){
+int OrderManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=TAKE_PROFIT, int sl=STOP_LOSS){
    if(price==0.0)    
       price=otype==OP_BUY? Ask: otype==OP_SELL? Bid: price;
    
@@ -171,7 +171,7 @@ int TradeManager::OpenPosition(string symbol, int otype, double price=0.0, doubl
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-int TradeManager::ClosePosition(int ticket) {
+int OrderManager::ClosePosition(int ticket) {
    if(ticket<0)
       return -1;
       
@@ -197,7 +197,7 @@ int TradeManager::ClosePosition(int ticket) {
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-void TradeManager::CloseAllPositions(){
+void OrderManager::CloseAllPositions(){
    int n_start=OrdersTotal();
    
    for(int i=0; i<OrdersTotal(); i++) {
@@ -227,7 +227,7 @@ void TradeManager::CloseAllPositions(){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-void TradeManager::UpdateClosedPositions() {
+void OrderManager::UpdateClosedPositions() {
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
          continue;
@@ -267,7 +267,7 @@ void TradeManager::UpdateClosedPositions() {
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-double TradeManager::GetTotalProfit(bool unrealized=true){
+double OrderManager::GetTotalProfit(bool unrealized=true){
    double profit=0.0;
    
    for(int i=0; i<OrdersTotal(); i++) {
@@ -291,7 +291,7 @@ double TradeManager::GetTotalProfit(bool unrealized=true){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-string TradeManager::GetHistoryStats(){
+string OrderManager::GetHistoryStats(){
    // retrieving info from trade history 
    int i,hstTotal=OrdersHistoryTotal(); 
    for(i=0;i<hstTotal;i++){ 
@@ -306,7 +306,7 @@ string TradeManager::GetHistoryStats(){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-string TradeManager::GetAcctStats(){
+string OrderManager::GetAcctStats(){
    log("***** Trading Account *****");
    log("Account: "+AccountInfoString(ACCOUNT_NAME));
    log("Broker: "+AccountInfoString(ACCOUNT_COMPANY)); 
@@ -319,7 +319,7 @@ string TradeManager::GetAcctStats(){
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-void TradeManager::GetAssetStats(){
+void OrderManager::GetAssetStats(){
    log("***** Asset Info *****");
    log("Symbol: "+Symbol());
    log("Desc: "+SymbolInfoString(Symbol(),SYMBOL_DESCRIPTION));

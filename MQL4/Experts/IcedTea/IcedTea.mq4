@@ -10,7 +10,7 @@
 #include "Include/Chart.mqh"
 #include "Include/Graph.mqh"
 #include "Include/SwingPoints.mqh"
-#include "Include/TradeManager.mqh"
+#include "Include/OrderManager.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
 #include "Algos/SR.mqh"
@@ -28,7 +28,7 @@ enum Algorithms {WEIS_CVD};
 Algorithms CurrentAlgo     = WEIS_CVD;
 SwingGraph* Swings         = NULL;
 HUD* Hud                   = NULL;
-TradeManager* TM           = NULL;
+OrderManager* TM           = NULL;
 
 
 //+------------------------------------------------------------------+
@@ -57,7 +57,7 @@ int OnInit() {
    Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetDialogMsg("Hud created.");
    
-   TM = new TradeManager();
+   TM = new OrderManager();
    TM.GetAcctStats();
    TM.GetAssetStats();
    
