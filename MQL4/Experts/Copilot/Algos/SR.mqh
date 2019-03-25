@@ -46,7 +46,7 @@ int GenerateSR(SwingGraph* Swings){
          continue;
       appendDoubleArray(group,levels[i][1]);
          
-      log("levels["+(string)i+"]: "+DoubleToStr(levels[i][0]));
+      //log("levels["+(string)i+"]: "+DoubleToStr(levels[i][0]));
       
       // Group levels with close proximity
       for(int j=i+1; j<ArrayRange(levels,0); j++){
@@ -59,7 +59,7 @@ int GenerateSR(SwingGraph* Swings){
       }
       
       // Evaluate historic hit rate of SR level
-      SwingPoint* sp=Swings.GetNode(group[0]);
+      SwingPoint* sp=(SwingPoint*)Swings.GetNode((int)group[0]);
       double p=sp.Type==LOW? sp.L: sp.H;
       int s_misses=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_ABOVE);
       int r_misses=CountLevelHits(p, sp.Shift, 1, WICK_AREA, CLOSED_BEYOND, FROM_BELOW);
@@ -68,7 +68,7 @@ int GenerateSR(SwingGraph* Swings){
       
       // Draw ungrouped levels as trendline
       if(ArraySize(group)==1){
-         SwingPoint* _sp=Swings.GetNode(group[0]);
+         SwingPoint* _sp=Swings.GetNode((int)group[0]);
          CreateTrendline("SR_"+(string)i,iTime(NULL,0,0),
             _sp.GetValue(),iTime(NULL,0,_sp.Shift),_sp.GetValue(),0,
             SR_LINE_COLOR,STYLE_SOLID,SR_LINE_WIDTH,
@@ -79,7 +79,7 @@ int GenerateSR(SwingGraph* Swings){
          double prices[];
          datetime dt[];
          for(int k=0; k<ArraySize(group); k++){
-            SwingPoint* _sp=Swings.GetNode(group[k]);
+            SwingPoint* _sp=Swings.GetNode((int)group[k]);
             appendDoubleArray(prices,_sp.GetValue());
             appendDtArray(dt,_sp.DT);
          }

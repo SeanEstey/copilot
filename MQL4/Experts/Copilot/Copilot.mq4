@@ -13,6 +13,7 @@
 #include "Include/OrderManager.mqh"
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
+#include "Include/Watcher.mqh"
 #include "Algos/SR.mqh"
 
 #define KEY_L           76
@@ -22,11 +23,12 @@
 
 
 enum Algorithms {WEIS_CVD};
+enum Modes {COPILOT_MODE, AUTO_MODE};
 
 
 //--- Globals
 Algorithms CurrentAlgo     = WEIS_CVD;
-SwingGraph* Swings         = NULL;
+SwingGraph* SRLevels         = NULL;
 HUD* Hud                   = NULL;
 OrderManager* TM           = NULL;
 
@@ -61,10 +63,10 @@ int OnInit() {
    TM.GetAcctStats();
    TM.GetAssetStats();
    
-   Swings = new SwingGraph();
-   Swings.DiscoverNodes(NULL,0,1000,1);
-   Swings.UpdateNodeLevels(0); 
-   GenerateSR(Swings);  
+   SRLevels = new SwingGraph();
+   SRLevels.DiscoverNodes(NULL,0,1000,1);
+   SRLevels.UpdateNodeLevels(0); 
+   GenerateSR(SRLevels);  
    
    return(INIT_SUCCEEDED);
 }
@@ -76,7 +78,7 @@ void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    delete TM;
    delete Hud;
-   delete Swings;
+   delete SRLevels;
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR); 
    int n=ObjectsDeleteAll();
@@ -92,7 +94,7 @@ void OnTick() {
    if(!NewBar())
       return;
    
-   Swings.UpdateNodeLevels(0);
+   SRLevels.UpdateNodeLevels(0);
    
    int signal=GetSignal();
    /*
@@ -148,13 +150,7 @@ void OnTick() {
    //   (string)TM.GetTotalProfit(false)+" Realized PNL.");
 }
 
-//+------------------------------------------------------------------+
-//| Tester function                                                  |
-//+------------------------------------------------------------------+
-double OnTester() {
-   double ret=0.0;
-   return(ret);
-}
+
 
 //+------------------------------------------------------------------+
 //| ChartEvent function                                              |
@@ -243,4 +239,50 @@ void OnMouseClick(long lparam, double dparam, string sparam) {
    datetime atTime;
    double atPrice;
    ChartXYToTimePrice(0,x,y,subwindow,atTime,atPrice);
+}
+
+//+------------------------------------------------------------------+
+//| Tester function                                                  |
+//| Called at completion of Strategy Tester                          |
+//+------------------------------------------------------------------+
+double OnTester() {
+   log("OnTester()");
+
+   double ret=0.0;
+   return(ret);
+}
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void InitAutoMode(){
+   // WRITEME: pass in Algo to run in FullAuto mode as arg
+}
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void InitCopilotMode(){
+   // WRITEME: init Watcher and wait for user to create TradeSetups
+   string symbol="XTIUSD.pro";
+   int tf=PERIOD_H4;
+   
+   Order* order=new Order(-1,symbol,OP_BUY,1,0,0,0);
+   Condition* c=new Condition(symbol, tf, 55.214, SFP, BULLISH);
+   TradeSetup* setup=new TradeSetup(symbol, tf, c, order);
+}
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void CopilotOnTick(){
+
+}
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void AutoOnTick(){
+
 }

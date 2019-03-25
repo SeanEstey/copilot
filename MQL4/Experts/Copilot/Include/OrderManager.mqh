@@ -58,7 +58,7 @@ class OrderManager {
 Order::Order(int _ticket, string _symbol, int _otype, double _lots, int _sl, int _tp, double _profit){
    this.Symbol=_symbol;
    this.Ticket=_ticket;
-   this.Type=_otype;
+   this.Type=_otype;    
    this.Lots=_lots;
    this.Sl=_sl;
    this.Tp=_tp;

@@ -1,14 +1,14 @@
 //+---------------------------------------------------------------------------+
-//|                                                  Include/Watcher.mq4 |      
+//|                                                       Include/Watcher.mq4 |      
 //+---------------------------------------------------------------------------+
 #property strict
 #include "Logging.mqh"
 #include "OrderManager.mqh"
 
 enum LevelReaction {SFP,BOUNCE,BREAK};
-enum ReactionDirection {BULLISH, BEARISH};
-enum SetupState {WATCHING,EXECUTING,COMPLETED};
-enum ConditionState {PENDING,VALIDATED,INVALIDATED};
+enum ReactionDirection {BULLISH,BEARISH};
+enum SetupState {PENDING,VALIDATED,INVALIDATED};
+enum ConditionState {MET,UNMET,FAILED};
 
 //----------------------------------------------------------------------------+
 //|*************************** Class Interfaces ******************************|
@@ -26,7 +26,7 @@ class Condition {
    public:
       Condition(string _symbol, int _tf, double _level, LevelReaction _reaction, ReactionDirection _dir);
       ~Condition();
-      ConditionState Eval();
+      ConditionState Test();
       string ToString();
 };
 
@@ -43,9 +43,9 @@ class TradeSetup {
    public:
       TradeSetup(string _symbol, int _tf, Condition* _condition, Order* _order);
       ~TradeSetup();
-      int AddCondition(Condition* c);
-      int RmvCondition(Condition* c);
-      bool Eval();
+      int Add(Condition* c);
+      int Rmv(Condition* c);
+      SetupState Eval();
 };
 
 //+---------------------------------------------------------------------------+
@@ -64,22 +64,18 @@ class Watcher {
 };
 
 //----------------------------------------------------------------------------+
-//|************************ Condition Implementation**************************|
+//|****************************** Condition Methods **************************|
 //----------------------------------------------------------------------------+
 
 //+---------------------------------------------------------------------------+
 Condition::Condition(string _symbol, int _tf, double _level, LevelReaction _reaction, ReactionDirection _dir){
-   
-   /*** FIXME: needs to be unique, might create conflicts if 
-    multiple constructors called within same millisecond span ***/
-   this.id=GetTickCount(); 
-   
+   this.id=GetTickCount(); // FIXME: ID may not be unique if constructor called twice in same millisecond span
    this.symbol=_symbol;
    this.tf=_tf;
    this.level=_level;
    this.reaction=_reaction;
    this.dir=_dir;
-   this.state=PENDING;
+   this.state=UNMET;
 }
 
 //+---------------------------------------------------------------------------+
@@ -88,8 +84,8 @@ Condition::~Condition(){
 }
 
 //+---------------------------------------------------------------------------+
-ConditionState Condition::Eval(){
-   if(!this.state==PENDING)
+ConditionState Condition::Test(){
+   if(this.state!=UNMET)
       return this.state;
    
    // For readability
@@ -98,34 +94,34 @@ ConditionState Condition::Eval(){
    double low=iLow(this.symbol,this.tf,1);
    double high=iHigh(this.symbol,this.tf,1);
     
-   // SFP states: PENDING, VALIDATED, or INVALIDATED
    // FIXME: detect case where high/low/close==this.level
+   // SFP states: MET/UNMET/FAILED
    if(reaction==SFP){
       if(dir==BULLISH && low<level && close>level)
-         state=VALIDATED;
+         state=MET;
       else if(dir==BULLISH && low<level && close<level)
-         state=INVALIDATED;
+         state=FAILED;
       else if(dir==BEARISH && high>level && close<level)
-         state=VALIDATED;
+         state=MET;
       else if(dir==BEARISH && high>level && close>level)
-         state=INVALIDATED;
+         state=FAILED;
    }
-   // Level break states: PENDING or VALIDATED (cannot be invalidated)
+   // Level break states: MET/UNMET
    else if(reaction==BREAK){
       if(dir==BULLISH && open<level && close>level)
-         state=VALIDATED;
+         state=MET;
       else if(dir==BEARISH && open>level && close<level)
-         state=VALIDATED;
+         state=MET;
    }
    // Bounce states: PENDING, VALIDATED or INVALIDATED
    else if(reaction==BOUNCE){
       // WRITEME
    }
    
-   if(state!=PENDING){
+   if(state!=UNMET){
       log((dir==BULLISH? "Bullish ": "Bearish ")+
          (reaction==SFP? "SFP ": reaction==BREAK? "Break ": reaction==BOUNCE? "Bounce ": "")+
-         "pattern "+(state==VALIDATED? "VALIDATED": "INVALIDATED")
+         "pattern "+(state==MET? "MET": "FAILED")
       );
    }
    return this.state;
@@ -142,31 +138,34 @@ string Condition::ToString(){
 
 
 //----------------------------------------------------------------------------+
-//|************************ TradeSetup Implementation*************************|
+//|************************ TradeSetup Methods *******************************|
 //----------------------------------------------------------------------------+
+
 
 //+---------------------------------------------------------------------------+
 TradeSetup::TradeSetup(string _symbol, int _tf, Condition* _condition, Order* _order){
+   this.id=GetTickCount(); // FIXME: ID may not be unique if constructor called twice in same millisecond span
    this.symbol=_symbol;
    this.tf=_tf;
    this.order=_order;
-   this.AddCondition(_condition);
-   this.state=WATCHING;
+   this.Add(_condition);
+   this.state=PENDING;
 }
 
 //+---------------------------------------------------------------------------+
 TradeSetup::~TradeSetup(){
+   // WRITEME
 }
 
 //+---------------------------------------------------------------------------+
-int TradeSetup::AddCondition(Condition* c){
+int TradeSetup::Add(Condition* c){
    ArrayResize(this.conditions, ArraySize(this.conditions)+1);
    this.conditions[ArraySize(this.conditions)-1]=c;
    return 1;
 }
 
 //+---------------------------------------------------------------------------+
-int TradeSetup::RmvCondition(Condition* c){
+int TradeSetup::Rmv(Condition* c){
    for(int i=0; i<ArraySize(this.conditions); i++){
       if(this.conditions[i].id!=c.id)
          continue;
@@ -174,18 +173,61 @@ int TradeSetup::RmvCondition(Condition* c){
       int s1=ArraySize(this.conditions);
       /*** TESTME: What lib is this from? Not found in docs ***/
       ArrayRemove(this.conditions,i,1);
-      log("Condition ID "+(string)c.id+" removed from setup ("+(string)s1+"-->"+(string)ArraySize(this.conditions));
+      log("Condition ID "+(string)c.id+" removed from setup ("+
+         (string)s1+"-->"+(string)ArraySize(this.conditions)
+      );
    }
    return 1;
 }
 
 //+---------------------------------------------------------------------------+
-Watcher::Watcher(){
+//| Evaluate conditions and execute trade if met, rmv setup if invalidated.
+//+---------------------------------------------------------------------------+
+SetupState TradeSetup::Eval(){
+   int n_met=0, n_failed=0, n_unmet=0;
+   
+   for(int i=0; i<ArraySize(this.conditions); i++){
+      Condition* c=this.conditions[i];
+      
+      if(c.state==FAILED){
+         n_failed++;
+         continue;
+      }
+         
+      c.Test();
+      
+      if(c.state==UNMET)
+         n_unmet++;
+      else if(c.state==MET)
+         n_met++;
+      else if(c.state==FAILED)
+         n_failed++;
+   }
+   
+   string msg="Unmet: "+(string)n_unmet+", Met: "+(string)n_met+", Failed: "+(string)n_failed;
+   
+   if(n_met==ArraySize(this.conditions)){
+      this.state=VALIDATED;
+      log("TradeSetup ID "+(string)id+": Validated ("+msg+")");
+   }
+   else if(n_failed>0){
+      this.state=INVALIDATED;
+      log("TradeSetup ID "+(string)id+": Invalidated ("+msg+")");
+   }
+   return this.state;
 }
 
+
+//----------------------------------------------------------------------------+
+//|*************************** Watcher Methods *******************************|
+//----------------------------------------------------------------------------+
+
+
 //+---------------------------------------------------------------------------+
-Watcher::~Watcher(){
-}
+Watcher::Watcher(){}
+
+//+---------------------------------------------------------------------------+
+Watcher::~Watcher(){}
 
 //+---------------------------------------------------------------------------+
 int Watcher::Add(TradeSetup* setup){
@@ -197,9 +239,7 @@ int Watcher::Add(TradeSetup* setup){
 //+---------------------------------------------------------------------------+
 int Watcher::Rmv(TradeSetup* setup){
    /*** FIXME: test if setup has EXECUTING state, send warning to user ***/
-   
    //ArrayRemove(this.setups,i,1);
-   
    return -1;
 }
 
@@ -214,24 +254,18 @@ int Watcher::ClearAll(){
 }
 
 //+---------------------------------------------------------------------------+
-bool Watcher::Eval(TradeSetup* strat){
-   return false;
-}
-
-//+---------------------------------------------------------------------------+
 int Watcher::TickUpdate(){
-
    for(int i=0; i<ArraySize(this.setups); i++){
-      if(this.setups[i].state==COMPLETED)
-         continue;
-      if(this.setups[i].state==WATCHING){
-         // Test if setup conditions are ready
+      TradeSetup* setup=this.setups[i];
+      SetupState s=setup.Eval();
+      
+      if(s==VALIDATED){
+         // WRITEME: Execute trade
+         
       }
-      else if(this.setups[i].state==EXECUTING){
-         // Test if position has closed since last tick update
-      }
-   
+      else if(s==INVALIDATED){
+         // WRITEME: Remove setup from watchlist
+      }      
    }
-   
    return -1;
 }
