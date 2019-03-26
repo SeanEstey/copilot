@@ -20,11 +20,12 @@ class Order {
       int Ticket;
       int Type;         // enum: OP_BUY, OP_SELL, OP_BUYLIMIT, OP_SELLLIMIT
       double Lots;
+      double Price;     // For limit orders
       int Sl;           // Pips
       int Tp;           // Pips
       double Profit;
    public:
-      Order(int _ticket, string _symbol, int _otype, double _lots, int _sl, int tp, double _profit);
+      Order(int _ticket, string _symbol, int _otype, double _lots, double _profit, int _sl=STOP_LOSS, int _tp=TAKE_PROFIT);
       ~Order();
 };
 
@@ -55,7 +56,7 @@ class OrderManager {
 //----------------------------------------------------------------------------+
 
 //+---------------------------------------------------------------------------+
-Order::Order(int _ticket, string _symbol, int _otype, double _lots, int _sl, int _tp, double _profit){
+Order::Order(int _ticket, string _symbol, int _otype, double _lots, double _profit, int _sl=STOP_LOSS, int _tp=TAKE_PROFIT){
    this.Symbol=_symbol;
    this.Ticket=_ticket;
    this.Type=_otype;    
@@ -143,6 +144,7 @@ bool OrderManager::HasExistingPosition(string symbol, int otype){
 
 //+---------------------------------------------------------------------------+
 //| otype: OP_BUY,OP_SELL,OP_BUYLIMIT,OP_SELLLIMIT
+//| Returns: ticket number on success, -1 on error
 //+---------------------------------------------------------------------------+
 int OrderManager::OpenPosition(string symbol, int otype, double price=0.0, double lots=1.0, int tp=TAKE_PROFIT, int sl=STOP_LOSS){
    if(price==0.0)    

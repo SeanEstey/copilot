@@ -28,9 +28,10 @@ enum Modes {COPILOT_MODE, AUTO_MODE};
 
 //--- Globals
 Algorithms CurrentAlgo     = WEIS_CVD;
-SwingGraph* SRLevels         = NULL;
+SwingGraph* SRLevels       = NULL;
 HUD* Hud                   = NULL;
-OrderManager* TM           = NULL;
+OrderManager* OM           = NULL;
+Watcher* W                 = NULL;
 
 
 //+------------------------------------------------------------------+
@@ -39,7 +40,6 @@ OrderManager* TM           = NULL;
 int OnInit() {
    // Register Event Handlers
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
-   
    Hud = new HUD("Copilot v"+VERSION);
    Hud.AddItem("acct_name","Account","");
    Hud.AddItem("balance","Balance","");
@@ -58,16 +58,15 @@ int OnInit() {
    Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
    Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetDialogMsg("Hud created.");
-   
-   TM = new OrderManager();
-   TM.GetAcctStats();
-   TM.GetAssetStats();
-   
+   OM=new OrderManager();
+   OM.GetAcctStats();
+   OM.GetAssetStats();
    SRLevels = new SwingGraph();
    SRLevels.DiscoverNodes(NULL,0,1000,1);
    SRLevels.UpdateNodeLevels(0); 
    GenerateSR(SRLevels);  
-   
+   W=new Watcher();
+   InitCopilotMode();
    return(INIT_SUCCEEDED);
 }
 
@@ -76,7 +75,7 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
    log(deinit_reason(reason));
-   delete TM;
+   delete OM;
    delete Hud;
    delete SRLevels;
    ObjectDelete(0,V_CROSSHAIR);
@@ -95,62 +94,18 @@ void OnTick() {
       return;
    
    SRLevels.UpdateNodeLevels(0);
+   W.TickUpdate(OM);
+   OM.UpdateClosedPositions(); 
    
-   int signal=GetSignal();
-   /*
-   // Close short positions (if any) and open a long.
-   if(signal==OPEN_LONG){
-      if(TM.GetNumActiveOrders()>0){ 
-         Order* order=TM.GetActiveOrder();
-         if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT)
-            if(TM.ClosePosition(order.Ticket)>-1)
-               Hud.SetDialogMsg("Closed Short.",false);
-      }
-      if(TM.GetNumActiveOrders()==0)
-         if(TM.OpenPosition(NULL,OP_BUY)>-1)
-            Hud.SetDialogMsg("Opened Long.",false);
-   }
-   // Close long positions (if any) and open a short.
-   else if(signal==OPEN_SHORT){
-      if(TM.GetNumActiveOrders()>0){
-         Order* order=TM.GetActiveOrder();   
-         if(order.Type==OP_BUY || order.Type==OP_BUYLIMIT)
-            if(TM.ClosePosition(order.Ticket)>-1)
-               Hud.SetDialogMsg("Closed Long.",false);
-      }
-      if(TM.GetNumActiveOrders()==0)
-         if(TM.OpenPosition(NULL,OP_SELL)>-1)
-            Hud.SetDialogMsg("Opened Short.",false);
-   }
-   else if(signal==CLOSE_LONG && TM.GetNumActiveOrders()>0){
-      Order* order=TM.GetActiveOrder();
-      if(order.Type==OP_BUY || order.Type==OP_BUYLIMIT){
-         TM.ClosePosition(order.Ticket);
-         Hud.SetDialogMsg("Closed Long.",false);
-      }
-   }
-   else if(signal==CLOSE_SHORT && TM.GetNumActiveOrders()>0){
-      Order* order=TM.GetActiveOrder();
-      if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT){
-         TM.ClosePosition(order.Ticket);
-         Hud.SetDialogMsg("Closed Short.",false);
-      }
-   }*/
-   
-   
-   TM.UpdateClosedPositions(); 
    Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
    Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
-   Hud.SetItemValue("unreal_pnl",(string)TM.GetTotalProfit(true));
-   Hud.SetItemValue("real_pnl",(string)TM.GetTotalProfit(false));
-   Hud.SetItemValue("ntrades",(string)TM.GetNumActiveOrders());
-   
-   //log("OnTick(): "+(string)TM.GetNumActiveOrders()+" open position(s), "+
-   //   (string)TM.GetTotalProfit()+" Unrealized PNL, "+
-   //   (string)TM.GetTotalProfit(false)+" Realized PNL.");
+   Hud.SetItemValue("unreal_pnl",(string)OM.GetTotalProfit(true));
+   Hud.SetItemValue("real_pnl",(string)OM.GetTotalProfit(false));
+   Hud.SetItemValue("ntrades",(string)OM.GetNumActiveOrders());
+   //log("OnTick(): "+(string)OM.GetNumActiveOrders()+" open position(s), "+
+   //   (string)OM.GetTotalProfit()+" Unrealized PNL, "+
+   //   (string)OM.GetTotalProfit(false)+" Realized PNL.");
 }
-
-
 
 //+------------------------------------------------------------------+
 //| ChartEvent function                                              |
@@ -203,14 +158,16 @@ void OnKeyPress(long lparam, double dparam, string sparam){
    switch((int)lparam){
       case KEY_ESC:
          break;
-      case KEY_R: 
+      case KEY_R:
+         log("R key input detected.");
+         W.watchlist[0].state=VALIDATED;
          break;   
       case KEY_S: 
          break;
       case KEY_L: 
          break;
       default:
-         //log("Unmapped key:"+(string)lparam); 
+         log("Unmapped keybind:"+(string)lparam); 
          break;
    } 
    ChartRedraw(); 
@@ -261,16 +218,27 @@ void InitAutoMode(){
 }
 
 //+------------------------------------------------------------------+
-//|                                                                  |
+//| WRITEME: init Watcher and wait for user to create TradeSetups                                                                  |
 //+------------------------------------------------------------------+
 void InitCopilotMode(){
-   // WRITEME: init Watcher and wait for user to create TradeSetups
    string symbol="XTIUSD.pro";
    int tf=PERIOD_H4;
    
-   Order* order=new Order(-1,symbol,OP_BUY,1,0,0,0);
+   Order* order=new Order(-1,symbol,OP_BUY,1,0);
    Condition* c=new Condition(symbol, tf, 55.214, SFP, BULLISH);
-   TradeSetup* setup=new TradeSetup(symbol, tf, c, order);
+   
+   TradeSetup* setups[];
+   for(int i=0; i<5; i++){
+      ArrayResize(setups, ArraySize(setups)+1);
+      setups[ArraySize(setups)-1]=new TradeSetup(symbol, tf, c, order);
+   }
+   
+   for(int i=0; i<5; i++){
+      W.Add(setups[i]);
+   }
+   
+   W.Rmv(setups[1]);
+   W.Rmv(setups[3]);
 }
 
 //+------------------------------------------------------------------+
@@ -284,5 +252,45 @@ void CopilotOnTick(){
 //|                                                                  |
 //+------------------------------------------------------------------+
 void AutoOnTick(){
+  /*int signal=GetSignal();
+   // Close short positions (if any) and open a long.
+   if(signal==OPEN_LONG){
+      if(OM.GetNumActiveOrders()>0){ 
+         Order* order=OM.GetActiveOrder();
+         if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT)
+            if(OM.ClosePosition(order.Ticket)>-1)
+               Hud.SetDialogMsg("Closed Short.",false);
+      }
+      if(OM.GetNumActiveOrders()==0)
+         if(OM.OpenPosition(NULL,OP_BUY)>-1)
+            Hud.SetDialogMsg("Opened Long.",false);
+   }
+   // Close long positions (if any) and open a short.
+   else if(signal==OPEN_SHORT){
+      if(OM.GetNumActiveOrders()>0){
+         Order* order=OM.GetActiveOrder();   
+         if(order.Type==OP_BUY || order.Type==OP_BUYLIMIT)
+            if(OM.ClosePosition(order.Ticket)>-1)
+               Hud.SetDialogMsg("Closed Long.",false);
+      }
+      if(OM.GetNumActiveOrders()==0)
+         if(OM.OpenPosition(NULL,OP_SELL)>-1)
+            Hud.SetDialogMsg("Opened Short.",false);
+   }
+   else if(signal==CLOSE_LONG && OM.GetNumActiveOrders()>0){
+      Order* order=OM.GetActiveOrder();
+      if(order.Type==OP_BUY || order.Type==OP_BUYLIMIT){
+         OM.ClosePosition(order.Ticket);
+         Hud.SetDialogMsg("Closed Long.",false);
+      }
+   }
+   else if(signal==CLOSE_SHORT && OM.GetNumActiveOrders()>0){
+      Order* order=OM.GetActiveOrder();
+      if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT){
+         OM.ClosePosition(order.Ticket);
+         Hud.SetDialogMsg("Closed Short.",false);
+      }
+   }*/
+   
 
 }
