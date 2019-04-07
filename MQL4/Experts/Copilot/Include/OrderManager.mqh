@@ -309,7 +309,7 @@ string OrderManager::GetHistoryStats(){
 //|
 //+---------------------------------------------------------------------------+
 string OrderManager::GetAcctStats(){
-   log("***** Trading Account *****");
+   log("----- Trading Account -----");
    log("Account: "+AccountInfoString(ACCOUNT_NAME));
    log("Broker: "+AccountInfoString(ACCOUNT_COMPANY)); 
    log("Server: "+AccountInfoString(ACCOUNT_SERVER)); 
@@ -322,7 +322,7 @@ string OrderManager::GetAcctStats(){
 //|
 //+---------------------------------------------------------------------------+
 void OrderManager::GetAssetStats(){
-   log("***** Asset Info *****");
+   log("----- Asset -----");
    log("Symbol: "+Symbol());
    log("Desc: "+SymbolInfoString(Symbol(),SYMBOL_DESCRIPTION));
    log("Point: "+(string)MarketInfo(Symbol(),MODE_POINT));

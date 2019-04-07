@@ -8,8 +8,7 @@
 #include "../Include//Chart.mqh"
 #include "../Include//Graph.mqh"
 #include "../Include//SwingPoints.mqh"
-
-enum Signals {NONE, OPEN_LONG, CLOSE_LONG, OPEN_SHORT, CLOSE_SHORT};
+#include "../Include//OrderManager.mqh"
 
 #define TEXT_OFFSET     0
 #define LVL_GROUP_DIST  100
@@ -17,15 +16,28 @@ enum Signals {NONE, OPEN_LONG, CLOSE_LONG, OPEN_SHORT, CLOSE_SHORT};
 #define SR_LINE_WIDTH   2
 #define SR_ZONE_COLOR   clrLightPink
 
-enum CandleRegion {ANY_REGION, WICK_AREA, LOW_OR_HIGH, BODY_AREA, OPEN_OR_CLOSE};       //OHLC
+enum Signals {NONE, OPEN_LONG, CLOSE_LONG, OPEN_SHORT, CLOSE_SHORT};
+enum CandleRegion {ANY_REGION, WICK_AREA, LOW_OR_HIGH, BODY_AREA, OPEN_OR_CLOSE};
 enum CollisionVector {FROM_ANYWHERE, FROM_ABOVE, FROM_BELOW};
 enum MatchType {COLLISION, CLOSED_BEYOND};
+
+//+---------------------------------------------------------------------------+
+ // Number of pips to group proximate SR levels by
+//+---------------------------------------------------------------------------+
+int GetGroupProximity() {
+   int baseGrpRad = 20;
+   double grpMult = 0.01;
+   int base_tf=PERIOD_M5;
+   int x= baseGrpRad + (int)((PeriodSeconds()/base_tf)*grpMult);
+   //log("GrpProximity (pips):"+(string)x);
+   return x;
+}
 
 //+---------------------------------------------------------------------------+
 //| Draws SR level trendlines/zones + hit rate stats                          |
 //+---------------------------------------------------------------------------+
 int GenerateSR(SwingGraph* Swings){
-   double levels[][2];        // 2D-array, each element containing array of {price,nodeIndex}
+   double levels[][2];        // 2D-array, each element is {price,nodeIndex}
    ArrayResize(levels,Swings.NodeCount());
    
    for(int i=0; i<Swings.NodeCount(); i++){
@@ -52,7 +64,7 @@ int GenerateSR(SwingGraph* Swings){
       for(int j=i+1; j<ArrayRange(levels,0); j++){
          if(levels[j][0]==0)
             continue;
-         if(MathAbs(ToPips(levels[i][0])-ToPips(levels[j][0])) < LVL_GROUP_DIST){
+         if(MathAbs(ToPips(levels[i][0])-ToPips(levels[j][0])) < GetGroupProximity()){
             appendDoubleArray(group,levels[j][1]);
             levels[j][0]=0;
          }
@@ -174,6 +186,24 @@ int Intersects(double price, int bar1, int bar2) {
 //+------------------------------------------------------------------+
 //| Returns: Signal enum
 //+------------------------------------------------------------------+
-int GetSignal(){
-   return 1;
+int GetSignal(OrderManager* OM){
+
+   // enum: OP_BUY, OP_SELL, OP_BUYLIMIT, OP_SELLLIMIT
+   Order* order=OM.GetActiveOrder();
+        
+   //if(order.Type==OP_SELL || order.Type==OP_SELLLIMIT)
+         
+   if(true){ //&& ord.HasExistingPosition(NULL, int otype)){
+      return OPEN_LONG;
+   }
+   else if(true){
+      return OPEN_SHORT;
+   }
+   else if(true){
+      return CLOSE_LONG;
+   }
+   else if(true){
+      return CLOSE_SHORT;
+   }
+   return -1;
 }

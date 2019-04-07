@@ -11,9 +11,7 @@ enum SetupState   {PENDING,VALIDATED,INVALIDATED};
 enum CondState    {MET,UNMET,FAILED};
 
 
-//|++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
 //|+++++++++++++++++++++++++++ Class Interfaces +++++++++++++++++++++++++++++++|
-//|++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
 
 
 //+----------------------------------------------------------------------------+
@@ -69,9 +67,8 @@ class Watcher {
       int TickUpdate(OrderManager* OM);
 };
 
-//|++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
+
 //|+++++++++++++++++++++++++++ Class Definitions+++++++++++++++++++++++++++++++|
-//|++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++|
 
 
 //+---------------------------------------------------------------------------+
@@ -84,10 +81,12 @@ Condition::Condition(string _symbol, int _tf, double lvl, Reaction react, Direct
    this.dir=_dir;
    this.state=UNMET;
 }
+
 //+---------------------------------------------------------------------------+
 Condition::~Condition(){
    // WRITEME
 }
+
 //+---------------------------------------------------------------------------+
 CondState Condition::Test(){
    if(this.state!=UNMET)
@@ -131,6 +130,7 @@ CondState Condition::Test(){
    }
    return this.state;
 }
+
 //+---------------------------------------------------------------------------+
 string Condition::ToString(){
    string str=this.reaction==SFP? "SFP": 
@@ -149,12 +149,14 @@ TradeSetup::TradeSetup(string _symbol, int _tf, Condition* c, Order* o){
    this.order=o;
    this.Add(c);
    this.state=PENDING;
-   log("TradeSetup ID: "+(string)this.id+" created.");
+   log("TradeSetup "+(string)this.id+" created.");
 }
+
 //+---------------------------------------------------------------------------+
 TradeSetup::~TradeSetup(){
    // WRITEME
 }
+
 //+---------------------------------------------------------------------------+
 int TradeSetup::Add(Condition* c){
    for(int i=0; i<ArraySize(this.conditions); i++){
@@ -175,20 +177,16 @@ int TradeSetup::Rmv(Condition* c){
       if(this.conditions[i].id!=c.id)
          continue;
       
-      Condition* tmp[];
-      ArrayCopy(tmp,this.conditions,0,0,WHOLE_ARRAY);
-      ArrayFree(this.conditions);
-      
-      for(int j=0; j<ArraySize(tmp); j++){
-         if(tmp[j].id==c.id)
-            continue;
-         ArrayResize(this.conditions, ArraySize(this.conditions)+1);
-         this.conditions[ArraySize(this.conditions)-1]=tmp[j];  
-      }
+      // Slice element out by concatenating
+      ArrayCopy(conditions,conditions,0,0,i+1);
+      ArrayCopy(conditions,conditions,i+1,i+1,ArraySize(conditions)-i-1);
+      ArrayResize(conditions, ArraySize(conditions)-1);
       
       log("Condition ID#"+(string)c.id+" removed from TradeSetup ("+
-         (string)ArraySize(tmp)+"-->"+(string)ArraySize(this.conditions)+").");
+         "Total:"+(string)ArraySize(conditions)+")");
+      return 1;
    }
+   log("Condition #"+(string)c.id+" not found TradeSetup.");
    return 1;
 }
 
@@ -253,7 +251,7 @@ int Watcher::Add(TradeSetup* setup){
 
    ArrayResize(this.watchlist, ArraySize(this.watchlist)+1);
    this.watchlist[ArraySize(this.watchlist)-1]=setup;
-   log("Watcher added TradeSetup ID: "+setup.id+
+   log("Added TradeSetup "+setup.id+
       " (Total: "+(string)ArraySize(this.watchlist)+")");
    return 1;
 }
@@ -264,24 +262,16 @@ int Watcher::Rmv(TradeSetup* setup){
       if(watchlist[i].id!=setup.id)
          continue;
       
-      TradeSetup* tmp[];
-      ArrayCopy(tmp,watchlist,0,0,WHOLE_ARRAY);
-      ArrayFree(watchlist);
-
-      for(int j=0; j<ArraySize(tmp); j++){
-         if(tmp[j].id==setup.id)
-            continue;
-            
-         ArrayResize(this.watchlist, ArraySize(this.watchlist)+1);
-         this.watchlist[ArraySize(watchlist)-1]=tmp[j];  
+      ArrayCopy(watchlist,watchlist,0,0,i+1);
+      ArrayCopy(watchlist,watchlist,i+1,i+1,ArraySize(watchlist)-i-1);
+      ArrayResize(watchlist, ArraySize(watchlist)-1);
       
-         log("Watcher removed TradeSetup ID#"+setup.id+
-            " ("+(string)ArraySize(tmp)+"-->"+(string)ArraySize(this.watchlist)+").");
-         return 1;
-      }   
+      log("Removed TradeSetup "+(string)setup.id+". "+
+         "(Total:"+(string)ArraySize(watchlist)+")");
+      return 1;
    }
       
-   log("Watcher::Rmv() Error: TradeSetup ID: "+setup.id+" not found in watchlist.");
+   log("Watcher::Rmv() Error: TradeSetup "+(string)setup.id+" not found in watchlist.");
    return -1;
 }
 
@@ -314,8 +304,8 @@ int Watcher::TickUpdate(OrderManager* OM){
       if(s==INVALIDATED){
          this.Rmv(setup);
          n_invalidated++;
-         log("Watcher invalidated TradeSetup #"+(string)setup.id+
-            ". Removed from watchlist.");
+         log("TradeSetup "+(string)setup.id+" invalidated. "+
+            "Removed from watchlist.");
       }  
       // Execute setup trade if conditions are met
       else if(s==VALIDATED){

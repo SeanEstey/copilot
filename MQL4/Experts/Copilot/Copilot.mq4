@@ -21,10 +21,8 @@
 #define KEY_S           83
 #define KEY_ESC         27
 
-
 enum Algorithms {WEIS_CVD};
 enum Modes {COPILOT_MODE, AUTO_MODE};
-
 
 //--- Globals
 Algorithms CurrentAlgo     = WEIS_CVD;
@@ -33,40 +31,30 @@ HUD* Hud                   = NULL;
 OrderManager* OM           = NULL;
 Watcher* W                 = NULL;
 
-
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 int OnInit() {
-   // Register Event Handlers
+   log("\n"+
+      "************************************************************************************************************\n"+
+      "   __________  ____  ______   ____ ______ \n"+
+      "  / ____/ __ \/ __ \/  _/ /  / __ /_  __/ \n"+
+      " / /   / / / / /_/ // // /  / / / // /    \n"+
+      "/ /___/ /_/ / _____/ // /__/ /_/ // /     \n"+
+      "\____/\____/_/   /___/_____\____//_/      \n"+
+      "\n"+
+      "************************************************************************************************************"
+   );
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
    Hud = new HUD("Copilot v"+VERSION);
-   Hud.AddItem("acct_name","Account","");
-   Hud.AddItem("balance","Balance","");
-   Hud.AddItem("free_margin", "Available Margin","");
-   Hud.AddItem("unreal_pnl","Unrealized Profit","");
-   Hud.AddItem("real_pnl","Realized Profit","");
-   Hud.AddItem("ntrades","Active Trades","");
-   Hud.AddItem("hud_hover_bar","Hover Bar","");
-   //Hud.AddItem("hud_window_bars","Bars","");
-   //Hud.AddItem("hud_highest_high","Highest High","");
-   //Hud.AddItem("hud_lowest_low", "Lowest Low", "");
-   //Hud.AddItem("hud_trend", "Swing Trend", "");
-   //Hud.AddItem("hud_nodes", "Swing Nodes", "");
-   //Hud.AddItem("hud_node_links", "Node Links", "");
-   Hud.SetItemValue("acct_name",AccountInfoString(ACCOUNT_NAME));
-   Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
-   Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
-   Hud.SetDialogMsg("Hud created.");
    OM=new OrderManager();
    OM.GetAcctStats();
    OM.GetAssetStats();
    SRLevels = new SwingGraph();
    SRLevels.DiscoverNodes(NULL,0,1000,1);
    SRLevels.UpdateNodeLevels(0); 
-   GenerateSR(SRLevels);  
-   W=new Watcher();
-   InitCopilotMode();
+   GenerateSR(SRLevels);   
+   //InitCopilotMode();
    return(INIT_SUCCEEDED);
 }
 
@@ -221,6 +209,8 @@ void InitAutoMode(){
 //| WRITEME: init Watcher and wait for user to create TradeSetups                                                                  |
 //+------------------------------------------------------------------+
 void InitCopilotMode(){
+   W=new Watcher();
+   
    string symbol="XTIUSD.pro";
    int tf=PERIOD_H4;
    
@@ -239,6 +229,8 @@ void InitCopilotMode(){
    
    W.Rmv(setups[1]);
    W.Rmv(setups[3]);
+   
+   log("Copilot Mode Initialized. Watchlist:"+(string)ArraySize(W.watchlist));
 }
 
 //+------------------------------------------------------------------+

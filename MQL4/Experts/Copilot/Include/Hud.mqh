@@ -99,6 +99,24 @@ class HUD {
             
          // Init MT4-GUI + Controls
          int yspacing=HUD_ITEM_ROW_HEIGHT+HUD_ITEM_ROW_SPACING;
+         
+         AddItem("acct_name","Account","");
+         AddItem("balance","Balance","");
+         AddItem("free_margin", "Available Margin","");
+         AddItem("unreal_pnl","Unrealized Profit","");
+         AddItem("real_pnl","Realized Profit","");
+         AddItem("ntrades","Active Trades","");
+         AddItem("hud_hover_bar","Hover Bar","");
+         //AddItem("hud_window_bars","Bars","");
+         //AddItem("hud_highest_high","Highest High","");
+         //AddItem("hud_lowest_low", "Lowest Low", "");
+         //AddItem("hud_trend", "Swing Trend", "");
+         //AddItem("hud_nodes", "Swing Nodes", "");
+         //AddItem("hud_node_links", "Node Links", "");
+         SetItemValue("acct_name",AccountInfoString(ACCOUNT_NAME));
+         SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
+         SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
+         SetDialogMsg("Hud created.");
       }
       //-----------------------------------------------------------------------+
       void ~HUD(){
