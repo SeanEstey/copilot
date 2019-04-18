@@ -155,4 +155,16 @@ class HUD {
          if(log==true)
             log(str);
       }
+      //-----------------------------------------------------------------------+
+      int Update(){
+        Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
+         Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
+         Hud.SetItemValue("unreal_pnl",(string)OM.GetTotalProfit(true));
+         Hud.SetItemValue("real_pnl",(string)OM.GetTotalProfit(false));
+         Hud.SetItemValue("ntrades",(string)OM.GetNumActiveTrades());
+         //log("OnTick(): "+(string)OM.GetNumActiveOrders()+" open position(s), "+
+         //   (string)OM.GetTotalProfit()+" Unrealized PNL, "+
+         //   (string)OM.GetTotalProfit(false)+" Realized PNL.");
+         return 1;
+      }
 };

@@ -14,7 +14,7 @@
 #include "Include/Draw.mqh"
 #include "Include/Hud.mqh"
 #include "Include/Watcher.mqh"
-#include "Algos/SR.mqh"
+#include "Include/SR.mqh"
 
 #define KEY_L           76
 #define KEY_R           82
@@ -26,9 +26,10 @@ enum Modes {COPILOT_MODE, AUTO_MODE};
 
 //--- Globals
 Algorithms CurrentAlgo     = WEIS_CVD;
-SwingGraph* SRLevels       = NULL;
+SwingGraph* SG             = NULL;
 HUD* Hud                   = NULL;
 OrderManager* OM           = NULL;
+SRLevelManager* SR         = NULL;
 Watcher* W                 = NULL;
 
 //+------------------------------------------------------------------+
@@ -48,12 +49,11 @@ int OnInit() {
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
    Hud = new HUD("Copilot v"+VERSION);
    OM=new OrderManager();
-   OM.GetAcctStats();
-   OM.GetAssetStats();
-   SRLevels = new SwingGraph();
-   SRLevels.DiscoverNodes(NULL,0,1000,1);
-   SRLevels.UpdateNodeLevels(0); 
-   GenerateSR(SRLevels);   
+   SG = new SwingGraph();
+   SG.DiscoverNodes(NULL,0,1000,1);
+   SG.UpdateNodeLevels(0); 
+   SR = new SRLevelManager();
+   SR.Generate(SG);
    //InitCopilotMode();
    return(INIT_SUCCEEDED);
 }
@@ -65,7 +65,7 @@ void OnDeinit(const int reason) {
    log(deinit_reason(reason));
    delete OM;
    delete Hud;
-   delete SRLevels;
+   delete SG;
    ObjectDelete(0,V_CROSSHAIR);
    ObjectDelete(0,H_CROSSHAIR); 
    int n=ObjectsDeleteAll();
@@ -81,18 +81,26 @@ void OnTick() {
    if(!NewBar())
       return;
    
-   SRLevels.UpdateNodeLevels(0);
-   W.TickUpdate(OM);
-   OM.UpdateClosedPositions(); 
+   SG.UpdateNodeLevels(0);
    
-   Hud.SetItemValue("free_margin",DoubleToStr(AccountInfoDouble(ACCOUNT_MARGIN_FREE),2));
-   Hud.SetItemValue("balance",DoubleToStr(AccountInfoDouble(ACCOUNT_BALANCE),2));
-   Hud.SetItemValue("unreal_pnl",(string)OM.GetTotalProfit(true));
-   Hud.SetItemValue("real_pnl",(string)OM.GetTotalProfit(false));
-   Hud.SetItemValue("ntrades",(string)OM.GetNumActiveOrders());
-   //log("OnTick(): "+(string)OM.GetNumActiveOrders()+" open position(s), "+
-   //   (string)OM.GetTotalProfit()+" Unrealized PNL, "+
-   //   (string)OM.GetTotalProfit(false)+" Realized PNL.");
+   //----------------------------------------------
+  /* int tf=PERIOD_H4;
+   Order* order=new Order(-1,Symbol(),OP_BUY,1,0);
+   Condition* c=new Condition(symbol, PeriodSeconds(), 55.214, SFP, BULLISH);
+   TradeSetup* setups[];
+   for(int i=0; i<5; i++){
+      ArrayResize(setups, ArraySize(setups)+1);
+      setups[ArraySize(setups)-1]=new TradeSetup(symbol, tf, c, order);
+   }
+   for(int i=0; i<5; i++){
+      W.Add(setups[i]);
+   }*/
+   //----------------------------------------------
+   
+   //W.TickUpdate(OM);
+   
+   OM.UpdateClosedPositions(); 
+   Hud.Update();
 }
 
 //+------------------------------------------------------------------+
@@ -155,7 +163,7 @@ void OnKeyPress(long lparam, double dparam, string sparam){
       case KEY_L: 
          break;
       default:
-         log("Unmapped keybind:"+(string)lparam); 
+         //log("Unmapped keybind:"+(string)lparam); 
          break;
    } 
    ChartRedraw(); 

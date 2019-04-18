@@ -11,6 +11,8 @@
 #define TAKE_PROFIT     1000
 #define STOP_LOSS       100
 
+enum ORDER_STATUS {INACTIVE,CLOSED,ACTIVE};
+
 //----------------------------------------------------------------------------+
 //|****************************** Order Class **************************
 //----------------------------------------------------------------------------+
@@ -24,9 +26,17 @@ class Order {
       int Sl;           // Pips
       int Tp;           // Pips
       double Profit;
+      datetime OpenTime;
+      datetime CloseTime;
+      double OpenPrice;
+      double ClosePrice;
+      double Commission;
+      string _Comment;
+      ORDER_STATUS Status;
    public:
       Order(int _ticket, string _symbol, int _otype, double _lots, double _profit, int _sl=STOP_LOSS, int _tp=TAKE_PROFIT);
       ~Order();
+      string ToString();
 };
 
 //----------------------------------------------------------------------------+
@@ -36,8 +46,8 @@ class OrderManager {
    public:
       OrderManager();
       ~OrderManager();
-      int GetNumActiveOrders();
-      Order* GetActiveOrder();
+      int GetNumActiveTrades(bool auto=true, bool manual=true);
+      Order* GetActiveTrade(int idx);
       double GetTotalProfit(bool unrealized=true);
       string GetHistoryStats();
       string GetAcctStats();
@@ -64,14 +74,66 @@ Order::Order(int _ticket, string _symbol, int _otype, double _lots, double _prof
    this.Sl=_sl;
    this.Tp=_tp;
    this.Profit=_profit;
+   
+   if(OrderSelect(_ticket,SELECT_BY_TICKET)){
+      this.OpenTime=OrderOpenTime();
+      this.CloseTime=OrderCloseTime();
+      this.OpenPrice=OrderOpenPrice();
+      this.ClosePrice=OrderClosePrice();
+      this.Profit=OrderProfit();
+      this.Commission=OrderCommission();
+      this._Comment=OrderComment();
+   }
+   
+   if(this.CloseTime>0)
+      this.Status=CLOSED;
+   else if(this.OpenTime>0)
+      this.Status=ACTIVE;
+   else
+      this.Status=INACTIVE;
 }
 
 //+---------------------------------------------------------------------------+
 Order::~Order(){
 }
 
+
+//+---------------------------------------------------------------------------+
+string Order::ToString(){
+   string str= "\n"+
+      "  Ticket: "+this.Ticket+"\n"+
+      "  Symbol: "+this.Symbol+"\n";
+   str+=this.CloseTime>0? "  Status: CLOSED\n": this.OpenTime>0? "  Status: ACTIVE\n": "  Status: INACTIVE\n";
+   str+= 
+      "  Entry: "+DoubleToStr(this.OpenPrice)+"\n"+
+      "  EnteredOn: "+(string)this.OpenTime+"\n";
+   if(this.CloseTime>0){
+      str+=
+        "  Exit: "+DoubleToStr(this.ClosePrice)+"\n"+
+        "  ExitedOn: "+(string)this.CloseTime+"\n";
+   }
+   str+=
+      "  Lots: "+(string)this.Lots+"\n"+
+      "  SL: "+DoubleToStr(this.Sl)+"\n"+
+      "  TP: "+DoubleToStr(this.Tp)+"\n"+
+      "  Profit: "+DoubleToStr(this.Profit)+"\n"+
+      "  Commission: "+DoubleToStr(this.Commission)+"\n"+
+      "  Comment: "+this._Comment;
+   return str;
+}
+
 //+---------------------------------------------------------------------------+
 OrderManager::OrderManager(){
+   log("----- OrderManager -----");
+   GetAcctStats();
+   GetAssetStats();
+   
+   int n=GetNumActiveTrades();
+   for(int i=0; i<n; i++){
+      Order* o=GetActiveTrade(i);
+      log(o.ToString());
+   }
+   log("");
 }
 
 //+---------------------------------------------------------------------------+
@@ -82,43 +144,41 @@ OrderManager::~OrderManager(){
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-int OrderManager::GetNumActiveOrders(){
+int OrderManager::GetNumActiveTrades(bool auto=true, bool manual=true){
    int n_active=0;
+   int n_active_other=0;
+   
    for(int i=0; i<OrdersTotal(); i++) {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
-         log("GetNumActiveOrders(): Could not retrieve order. "+err_msg());
+         log("GetNumActiveTrades(): Could not retrieve order. "+err_msg());
          continue;
       }
-      if(OrderMagicNumber()==MAGICMA)
-         n_active++;
+      if(OrderMagicNumber()==MAGICMA){
+         if(auto==true)
+            n_active++;
+      }
+      else {
+         if(manual==true)
+            n_active_other++;
+      } 
    }
-   return n_active;
+   log("NumActiveTrades(): "+(string)(n_active+n_active_other)+" trades.");
+   return n_active+n_active_other;
 }
 
 //+---------------------------------------------------------------------------+
 //|
 //+---------------------------------------------------------------------------+
-Order* OrderManager::GetActiveOrder(void){
-   for(int i=0; i<OrdersTotal(); i++) {
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)){
-         log("GetActiveOrder(): Could not retrieve order. "+err_msg());
-         continue;
-      }
-      if(OrderMagicNumber()==MAGICMA){
-         Order* order=new Order(
-            OrderTicket(),
-            OrderSymbol(),
-            OrderType(),
-            OrderLots(),
-            0,              // WRITE_ME
-            0,              // WRITE_ME
-            OrderProfit()
-         );
-         return order;
-      }
-   }
-   log("No active order to return!");
-   return NULL;
+Order* OrderManager::GetActiveTrade(int idx){
+   if(!OrderSelect(idx, SELECT_BY_POS, MODE_TRADES)){
+      log("GetActiveOrder(): Could not retrieve order. "+err_msg());
+      return NULL;
+   }      
+   
+   return new Order(OrderTicket(),OrderSymbol(),OrderType(),OrderLots(),
+      0,0, // WRITE_ME
+      OrderProfit()
+   );
 }
 
 
