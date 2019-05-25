@@ -48,12 +48,13 @@ int OnInit() {
    );
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE,true);
    Hud = new HUD("Copilot v"+VERSION);
-   OM=new OrderManager();
+   OM = new OrderManager();
    SG = new SwingGraph();
    SG.DiscoverNodes(NULL,0,1000,1);
    SG.UpdateNodeLevels(0); 
    SR = new SRLevelManager();
    SR.Generate(SG);
+   W = new Watcher();
    //InitCopilotMode();
    return(INIT_SUCCEEDED);
 }
@@ -81,24 +82,44 @@ void OnTick() {
    if(!NewBar())
       return;
    
+   log("OnTick()");
+   
    SG.UpdateNodeLevels(0);
+   SR.Generate(SG);
    
-   //----------------------------------------------
-  /* int tf=PERIOD_H4;
-   Order* order=new Order(-1,Symbol(),OP_BUY,1,0);
-   Condition* c=new Condition(symbol, PeriodSeconds(), 55.214, SFP, BULLISH);
-   TradeSetup* setups[];
-   for(int i=0; i<5; i++){
-      ArrayResize(setups, ArraySize(setups)+1);
-      setups[ArraySize(setups)-1]=new TradeSetup(symbol, tf, c, order);
+   int tf=PERIOD_H4;
+   
+   // Add any new levels not currently being watched to watchlist.
+   for(int i=0; i<SR.GetLevelCount(); i++){
+      SRLevel* sr=SR.GetLevel(i);
+      bool has_lvl=false;
+       
+      for(int j=0; j<W.GetWatchlistCount(); j++){
+         TradeSetup* ts=W.GetWatchlist(j);
+         
+         if(ts.state!=PENDING)
+            continue;
+         
+         for(int c=0; c<ArraySize(ts.conditions); c++){
+            if(ts.conditions[c].level==sr.price){
+               has_lvl=true;
+               break;
+            }
+         }
+      }
+      
+     if(has_lvl==false){
+         Direction dir=Ask>sr.price? BEARISH: BULLISH;
+         int otype=Ask>sr.price? OP_SELLLIMIT: OP_BUYLIMIT;
+         Condition* c=new Condition(Symbol(),tf,sr.price,BOUNCE,dir);
+         Order* o=new Order(-1,Symbol(),otype,1,-1);
+         W.Add(new TradeSetup(Symbol(), tf, c,o));
+      }
    }
-   for(int i=0; i<5; i++){
-      W.Add(setups[i]);
-   }*/
-   //----------------------------------------------
    
-   //W.TickUpdate(OM);
+   log("OnTick(): Watcher watching "+(string)W.GetWatchlistCount()+" setups.");
    
+   W.TickUpdate(OM);
    OM.UpdateClosedPositions(); 
    Hud.Update();
 }

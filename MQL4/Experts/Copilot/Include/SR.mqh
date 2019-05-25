@@ -51,6 +51,9 @@ class SRLevelManager {
    public:
       SRLevelManager();
       ~SRLevelManager();
+      int GetLevelCount();
+      SRLevel* GetLevel(int idx);
+      int Add(SRLevel* sr);
       int Generate(SwingGraph* Swings);
       int GetGroupProximity();  
       int CountLevelHits(double level, int bar1, int bar2, CandleRegion region=ANY_REGION, MatchType matchtype=COLLISION, CollisionVector vector=FROM_ANYWHERE);
@@ -103,6 +106,27 @@ SRLevelManager::~SRLevelManager(){
 }
 
 //+---------------------------------------------------------------------------+
+int SRLevelManager::GetLevelCount(){
+   return ArraySize(this.levels);
+}
+
+//+---------------------------------------------------------------------------+
+SRLevel* SRLevelManager::GetLevel(int idx){
+   if(idx >= ArraySize(this.levels)){
+      log("SRLevelManager::GetLevel(): Invalid index "+(string)idx);
+      return NULL;
+   }
+   return this.levels[idx];
+}
+
+//+---------------------------------------------------------------------------+
+int SRLevelManager::Add(SRLevel* sr){
+   ArrayResize(this.levels,ArraySize(this.levels)+1);
+   this.levels[ArraySize(this.levels)-1]=sr;
+   return 1;
+}
+
+//+---------------------------------------------------------------------------+
  // Number of pips to group proximate SR levels by
 //+---------------------------------------------------------------------------+
 int SRLevelManager::GetGroupProximity() {
@@ -123,41 +147,40 @@ int SRLevelManager::Generate(SwingGraph* Swings){
       this.levels[i].Erase();
    }
    
-  
-   double levels[][2];        // 2D-array, each element is {price,nodeIndex}
-   ArrayResize(levels,Swings.NodeCount());
+   double nodes[][2];        // 2D-array, each element is {price,nodeIndex}
+   ArrayResize(nodes,Swings.NodeCount());
    
    log("");
    log("----- Generating SR Levels -----");
    
    for(int i=0; i<Swings.NodeCount(); i++){
       SwingPoint* sp=Swings.GetNode(i);
-      if(sp.MyLevel!=LONG)
+      if(sp.MyLevel!=LONG_TERM)
          continue;
       
-      levels[i][0]=sp.GetValue();
-      levels[i][1]=i;
+      nodes[i][0]=sp.GetValue();
+      nodes[i][1]=i;
    }
-   ArraySort(levels,WHOLE_ARRAY,0,MODE_ASCEND); // Sort by price levels
+   ArraySort(nodes,WHOLE_ARRAY,0,MODE_ASCEND); // Sort by price levels
 
    int n_ungrp=0;
    int n_grp=0;
    
    // Group + Draw SR level trendlines/zones
-   for(int i=0; i<ArrayRange(levels,0); i++){
+   for(int i=0; i<ArrayRange(nodes,0); i++){
       double group[];
       
-      if(levels[i][0]==0.0)
+      if(nodes[i][0]==0.0)
          continue;
-      appendDoubleArray(group,levels[i][1]);
+      appendDoubleArray(group,nodes[i][1]);
       
       // Group levels with close proximity
-      for(int j=i+1; j<ArrayRange(levels,0); j++){
-         if(levels[j][0]==0)
+      for(int j=i+1; j<ArrayRange(nodes,0); j++){
+         if(nodes[j][0]==0)
             continue;
-         if(MathAbs(ToPips(levels[i][0])-ToPips(levels[j][0])) < GetGroupProximity()){
-            appendDoubleArray(group,levels[j][1]);
-            levels[j][0]=0;
+         if(MathAbs(ToPips(nodes[i][0])-ToPips(nodes[j][0])) < GetGroupProximity()){
+            appendDoubleArray(group,nodes[j][1]);
+            nodes[j][0]=0;
          }
       }
       
@@ -172,10 +195,11 @@ int SRLevelManager::Generate(SwingGraph* Swings){
       // Draw ungrouped levels as trendline
       if(ArraySize(group)==1){
          SwingPoint* _sp=Swings.GetNode((int)group[0]);
-         CreateTrendline("SR_"+(string)i,iTime(NULL,0,0),
+         this.Add(new SRLevel(Symbol(),0,_sp.GetValue(),_sp.Shift));
+         /*CreateTrendline("SR_"+(string)i,iTime(NULL,0,0),
             _sp.GetValue(),iTime(NULL,0,_sp.Shift),_sp.GetValue(),0,
             SR_LINE_COLOR,STYLE_SOLID,SR_LINE_WIDTH,
-            true,false,true,0);
+            true,false,true,0);*/
          n_ungrp++;
       }
       // Draw grouped levels as rectangular zone
@@ -187,20 +211,22 @@ int SRLevelManager::Generate(SwingGraph* Swings){
             appendDoubleArray(prices,_sp.GetValue());
             appendDtArray(dt,_sp.DT);
          }
-         CreateRect("SR+"+(string)group[0]+"_rect", 
+          this.Add(new SRLevel(Symbol(),0,prices[ArrayMinimum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
+          this.Add(new SRLevel(Symbol(),0,prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
+         /*CreateRect("SR+"+(string)group[0]+"_rect", 
             dt[ArrayMinimum(dt,WHOLE_ARRAY,0)],
             prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],
             iTime(NULL,0,0),
             prices[ArrayMinimum(prices,WHOLE_ARRAY,0)],
             0,0,SR_ZONE_COLOR,STYLE_SOLID,1,true,true,true,true,0
-         ); 
+         ); */
          n_grp++;
       }
       
       // Print SR level label
-      string lbl="H:"+(string)(s_hits+r_hits)+", M:"+(string)(s_misses+r_misses);
-      CreateText("SR_lbl_"+(string)i,lbl,
-         0,ANCHOR_LOWER,p,0,0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
+      //string lbl="H:"+(string)(s_hits+r_hits)+", M:"+(string)(s_misses+r_misses);
+      //CreateText("SR_lbl_"+(string)i,lbl,
+      //   0,ANCHOR_LOWER,p,0,0,0,"Arial",8,clrBlack,0.0,true,false,true,0);
    }
    log("Discovered Levels: "+(string)n_ungrp+" Ungrouped, "+(string)n_grp+" Grouped.");
    return 1;

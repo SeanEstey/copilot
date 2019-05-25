@@ -59,6 +59,8 @@ class Watcher {
    public:
       Watcher();
       ~Watcher();
+      int GetWatchlistCount();
+      TradeSetup* GetWatchlist(int idx);
       int Add(TradeSetup* setup);
       int Rmv(TradeSetup* setup);
       int RmvAll();
@@ -168,6 +170,7 @@ int TradeSetup::Add(Condition* c){
    
    ArrayResize(this.conditions, ArraySize(this.conditions)+1);
    this.conditions[ArraySize(this.conditions)-1]=c;
+   
    return 1;
 }
 
@@ -220,26 +223,45 @@ SetupState TradeSetup::Eval(){
    
    if(n_met==ArraySize(this.conditions)){
       this.state=VALIDATED;
-      log("TradeSetup ID "+(string)id+": Validated ("+msg+")");
+      //log("TradeSetup ID "+(string)id+": Validated ("+msg+")");
    }
    else if(n_failed>0){
       this.state=INVALIDATED;
-      log("TradeSetup ID "+(string)id+": Invalidated ("+msg+")");
+      //log("TradeSetup ID "+(string)id+": Invalidated ("+msg+")");
    }
    else {
-      log("TradeSetup ID "+(string)id+": Pending ("+msg+")");
+      //log("TradeSetup ID "+(string)id+": Pending ("+msg+")");
    }
+   
+  // log("Trade
    
    return this.state;
 }
 
 
 /*****************************************************************************/
+
+//+---------------------------------------------------------------------------+
 Watcher::Watcher(){
+   ArrayResize(this.watchlist,0);
 }
 
 //+---------------------------------------------------------------------------+
 Watcher::~Watcher(){}
+
+//+---------------------------------------------------------------------------+
+int Watcher::GetWatchlistCount() {return ArraySize(this.watchlist);}
+      
+//+---------------------------------------------------------------------------+      
+TradeSetup* Watcher::GetWatchlist(int idx){
+   if(idx >= ArraySize(this.watchlist)){
+      log("Watcher::GetWatchlist(): Invalid index "+(string)idx);
+      return NULL;
+   }
+   return this.watchlist[idx];
+
+}
+
 //+---------------------------------------------------------------------------+
 int Watcher::Add(TradeSetup* setup){
    for(int i=0; i<ArraySize(this.watchlist); i++){
