@@ -1,5 +1,5 @@
 //+---------------------------------------------------------------------------+
-//|                                                      Include/SR.mqh       |      
+//|                                                      Include/SD.mqh       |      
 //+---------------------------------------------------------------------------+
 #property strict
 
@@ -21,11 +21,31 @@ enum CandleRegion {ANY_REGION, WICK_AREA, LOW_OR_HIGH, BODY_AREA, OPEN_OR_CLOSE}
 enum CollisionVector {FROM_ANYWHERE, FROM_ABOVE, FROM_BELOW};
 enum MatchType {COLLISION, CLOSED_BEYOND};
 
+//+----------------------------------------------------------------------------+
+//| 
+//+----------------------------------------------------------------------------+
+class Impulse {
+   public:
+      // Price swing properties
+      int direction;    // 1:up, -1:down, 0:none
+      int start_ibar;
+      int end_ibar;
+      int chainlen;
+      int ob_ibar;
+      datetime startdt;
+      datetime enddt;
+      double height;
+      double n_deviations;
+   public:
+      Impulse(int dir, int startbar, int endbar, int len, int obibar, datetime dt1, datetime dt2, double ht, double ndev);
+      ~Impulse();
+};
+
 
 //+----------------------------------------------------------------------------+
 //| 
 //+----------------------------------------------------------------------------+
-class SRLevel {
+class SDZone {
    public:
       double price;
       int shift;
@@ -36,8 +56,8 @@ class SRLevel {
       int n_hits;
       int n_misses;
    public:
-      SRLevel(string _symbol, int _tf, double _price, int _shift);
-      ~SRLevel();
+      SDZone(string _symbol, int _tf, double _price, int _shift);
+      ~SDZone();
       int Draw();
       int Erase();
 };
@@ -45,15 +65,17 @@ class SRLevel {
 //+----------------------------------------------------------------------------+
 //| 
 //+----------------------------------------------------------------------------+
-class SRLevelManager {
+class SDZoneManager {
    public:
-     SRLevel *levels[];
+     SDZone *levels[];
+     Impulse *impulses[];
    public:
-      SRLevelManager();
-      ~SRLevelManager();
+      SDZoneManager();
+      ~SDZoneManager();
       int GetLevelCount();
-      SRLevel* GetLevel(int idx);
-      int Add(SRLevel* sr);
+      SDZone* GetLevel(int idx);
+      int Add(SDZone* sr);
+      int FindImpulses(int iBar, int period);
       int Generate(SwingGraph* Swings);
       int GetGroupProximity();  
       int CountLevelHits(double level, int bar1, int bar2, CandleRegion region=ANY_REGION, MatchType matchtype=COLLISION, CollisionVector vector=FROM_ANYWHERE);
@@ -61,8 +83,150 @@ class SRLevelManager {
 };
 
 
+
+
+
+
 //+---------------------------------------------------------------------------+
-SRLevel::SRLevel(string _symbol, int _tf, double _price, int _shift){
+//| 
+//+---------------------------------------------------------------------------+
+Impulse::Impulse(int dir, int startbar, int endbar, int len, int obibar, datetime dt1, datetime dt2, double ht, double ndev){
+   this.direction=dir;
+   this.start_ibar=startbar;
+   this.end_ibar=endbar;
+   this.chainlen=len;
+   this.ob_ibar=obibar;
+   this.startdt=dt1;
+   this.enddt=dt2;
+   this.height=ht;
+   this.n_deviations=ndev;
+}
+
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+int SDZoneManager::FindImpulses(int iBar, int period) {
+   Impulse moves[];
+   double point=MarketInfo(Symbol(),MODE_POINT);
+   
+   for(int i=iBar; i<iBar+period; i++) {
+      if(i==iBar) {
+         // Init new impulse
+         impulse x;
+         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+         x.start_ibar=i;
+         x.end_ibar=i;
+         x.chainlen=1;
+         x.startdt=Time[i];
+         x.enddt=Time[i];
+         x.height=(Close[i]-Open[i])/point;
+         x.ob_ibar=-1;
+         x.n_deviations=0;
+         
+         // Save it
+         ArrayResize(moves, ArraySize(moves)+1);
+         moves[ArraySize(moves)-1]=x;
+         continue;
+      }
+      
+      int dir=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+      Impulse last = moves[ArraySize(moves)-1];
+      
+      // Merge properties of impulses chained together.
+      // New impulse extends move by 1 bar to the left.
+      // Extend startdt, start_ibar, and height
+      if(last.direction == dir) {
+         log("Found an impulse chain!");
+         last.height+=(Close[i]-Open[i])/point;
+         last.start_ibar=i;
+         last.chainlen++;
+         last.startdt=Time[i];
+         moves[ArraySize(moves)-1] = last;
+      }
+      // New impulse
+      else {
+         impulse x;
+         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
+         x.start_ibar=i;
+         x.end_ibar=i;
+         x.chainlen=1;
+         x.startdt=Time[i];
+         x.enddt=Time[i];
+         x.height=(Close[i]-Open[i])/point;
+         x.n_deviations=0;
+         x.ob_ibar=-1;
+         ArrayResize(moves, ArraySize(moves)+1);
+         moves[ArraySize(moves)-1]=x;
+      }
+   }
+
+   double heights[];
+   ArrayResize(heights,ArraySize(moves));
+   for(int i=0; i<ArraySize(moves); i++) {
+      heights[i] = moves[i].height;
+   }
+   double mean_height = Average(heights);
+   double variance = Variance(heights, mean_height);
+   double std = MathSqrt(variance);
+      
+   for(int i=0; i<ArraySize(moves); i++){
+      moves[i].n_deviations = moves[i].height/std;
+      if(MathAbs(moves[i].n_deviations) >= MinImpulseStdDevs) {
+         moves[i].ob_ibar=moves[i].start_ibar+1;
+         ArrayResize(impulses, ArraySize(impulses)+1);
+         // **** WARNING: PROBABLY NOT SAFE ********
+         impulses[ArraySize(impulses)-1]=moves[i];
+      }     
+   }
+   
+   log("Updated impulses from iBar "+iBar+"-"+(iBar+period)+". Impulses:"+(string)ArraySize(impulses));
+   
+   int max_up=0, max_down=0;
+   for(int i=1; i<ArraySize(impulses); i++) {      
+      if(impulses[i].height > impulses[max_up].height)
+         max_up=i;
+      else if(impulses[i].height < impulses[max_down].height)
+         max_down=i;
+   }
+   
+   impulses[max_up].n_deviations = impulses[max_up].height/std;
+   if(MathAbs(impulses[max_up].n_deviations) >= 3)
+      impulses[max_up].ob_ibar=impulses[max_up].start_ibar+1;
+      
+   impulses[max_down].n_deviations = impulses[max_down].height/std;
+   if(MathAbs(impulses[max_down].n_deviations) >= 3)
+      impulses[max_down].ob_ibar=impulses[max_down].start_ibar+1;
+   
+   log("Mean chain height:"+DoubleToStr(mean_height,2)+" pips, Std_Dev:"+DoubleToStr(std,2)+" pips");
+   log(impulseToStr(impulses[max_up], std));
+   log(impulseToStr(impulses[max_down], std));
+ 
+}
+
+//+---------------------------------------------------------------------------+
+//| 
+//+---------------------------------------------------------------------------+
+string impulseToStr(impulse& x, double std) {
+   double point=MarketInfo(Symbol(),MODE_POINT);
+   string dir= x.direction == 1 ? "upward" : x.direction==-1 ? "downward" : "sideways"; 
+   string s = TimeToStr(x.startdt)+": "+(string)x.chainlen+"-chain "+dir+" impulse, height:"+DoubleToStr(x.height,2)+" pips, "+DoubleToStr(x.n_deviations,2)+"x STD. ";
+   if(x.ob_ibar >=0)
+      s+=" Parent OrderBlock: iBar["+(string)x.ob_ibar+"]";
+   return s;
+}
+
+
+
+
+
+
+
+
+
+
+//+---------------------------------------------------------------------------+
+SDZone::SDZone(string _symbol, int _tf, double _price, int _shift){
    this.symbol=_symbol;
    this.tf=_tf;
    this.price=_price;
@@ -73,12 +237,12 @@ SRLevel::SRLevel(string _symbol, int _tf, double _price, int _shift){
 }
 
 //+---------------------------------------------------------------------------+
-SRLevel::~SRLevel(){
+SDZone::~SDZone(){
    this.Erase();
 }
 
 //+---------------------------------------------------------------------------+
-int SRLevel::Draw(){
+int SDZone::Draw(){
    this.name="SR_"+DoubleToStr(this.price);
    this.lblname=this.name+"_lbl";
    CreateTrendline(
@@ -89,7 +253,7 @@ int SRLevel::Draw(){
 }
 
 //+---------------------------------------------------------------------------+
-int SRLevel::Erase(){
+int SDZone::Erase(){
    ObjectDelete(0,this.name);
    ObjectDelete(0,this.lblname);
    return 1;
@@ -97,30 +261,30 @@ int SRLevel::Erase(){
 
 
 //+---------------------------------------------------------------------------+
-SRLevelManager::SRLevelManager(){
+SDZoneManager::SDZoneManager(){
 }
 
 //+---------------------------------------------------------------------------+
-SRLevelManager::~SRLevelManager(){
+SDZoneManager::~SDZoneManager(){
 
 }
 
 //+---------------------------------------------------------------------------+
-int SRLevelManager::GetLevelCount(){
+int SDZoneManager::GetLevelCount(){
    return ArraySize(this.levels);
 }
 
 //+---------------------------------------------------------------------------+
-SRLevel* SRLevelManager::GetLevel(int idx){
+SDZone* SDZoneManager::GetLevel(int idx){
    if(idx >= ArraySize(this.levels)){
-      log("SRLevelManager::GetLevel(): Invalid index "+(string)idx);
+      log("SDZoneManager::GetLevel(): Invalid index "+(string)idx);
       return NULL;
    }
    return this.levels[idx];
 }
 
 //+---------------------------------------------------------------------------+
-int SRLevelManager::Add(SRLevel* sr){
+int SDZoneManager::Add(SDZone* sr){
    ArrayResize(this.levels,ArraySize(this.levels)+1);
    this.levels[ArraySize(this.levels)-1]=sr;
    return 1;
@@ -129,7 +293,7 @@ int SRLevelManager::Add(SRLevel* sr){
 //+---------------------------------------------------------------------------+
  // Number of pips to group proximate SR levels by
 //+---------------------------------------------------------------------------+
-int SRLevelManager::GetGroupProximity() {
+int SDZoneManager::GetGroupProximity() {
    int baseGrpRad = 20;
    double grpMult = 0.01;
    int base_tf=PERIOD_M5;
@@ -141,7 +305,7 @@ int SRLevelManager::GetGroupProximity() {
 //+---------------------------------------------------------------------------+
 //| Draws SR level trendlines/zones + hit rate stats                          |
 //+---------------------------------------------------------------------------+
-int SRLevelManager::Generate(SwingGraph* Swings){
+int SDZoneManager::Generate(SwingGraph* Swings){
    // Rmv existing levels
    for(int i=0; i<ArraySize(this.levels); i++){
       this.levels[i].Erase();
@@ -195,7 +359,7 @@ int SRLevelManager::Generate(SwingGraph* Swings){
       // Draw ungrouped levels as trendline
       if(ArraySize(group)==1){
          SwingPoint* _sp=Swings.GetNode((int)group[0]);
-         this.Add(new SRLevel(Symbol(),0,_sp.GetValue(),_sp.Shift));
+         this.Add(new SDZone(Symbol(),0,_sp.GetValue(),_sp.Shift));
          /*CreateTrendline("SR_"+(string)i,iTime(NULL,0,0),
             _sp.GetValue(),iTime(NULL,0,_sp.Shift),_sp.GetValue(),0,
             SR_LINE_COLOR,STYLE_SOLID,SR_LINE_WIDTH,
@@ -211,8 +375,8 @@ int SRLevelManager::Generate(SwingGraph* Swings){
             appendDoubleArray(prices,_sp.GetValue());
             appendDtArray(dt,_sp.DT);
          }
-          this.Add(new SRLevel(Symbol(),0,prices[ArrayMinimum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
-          this.Add(new SRLevel(Symbol(),0,prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
+          this.Add(new SDZone(Symbol(),0,prices[ArrayMinimum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
+          this.Add(new SDZone(Symbol(),0,prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],dt[ArrayMinimum(dt,WHOLE_ARRAY,0)]));
          /*CreateRect("SR+"+(string)group[0]+"_rect", 
             dt[ArrayMinimum(dt,WHOLE_ARRAY,0)],
             prices[ArrayMaximum(prices,WHOLE_ARRAY,0)],
@@ -234,7 +398,7 @@ int SRLevelManager::Generate(SwingGraph* Swings){
 
 //+---------------------------------------------------------------------------+
 //+---------------------------------------------------------------------------+
-int SRLevelManager::CountLevelHits(double level, int bar1, int bar2, CandleRegion region=ANY_REGION, MatchType matchtype=COLLISION, CollisionVector vector=FROM_ANYWHERE){
+int SDZoneManager::CountLevelHits(double level, int bar1, int bar2, CandleRegion region=ANY_REGION, MatchType matchtype=COLLISION, CollisionVector vector=FROM_ANYWHERE){
    double spread=MarketInfo(Symbol(),MODE_POINT)*SPREAD_MULT;
    int n=0;
    
@@ -281,7 +445,7 @@ int SRLevelManager::CountLevelHits(double level, int bar1, int bar2, CandleRegio
 
 //+---------------------------------------------------------------------------+
 //+---------------------------------------------------------------------------+
-int SRLevelManager::Intersects(double price, int bar1, int bar2) {
+int SDZoneManager::Intersects(double price, int bar1, int bar2) {
    if(bar1<=bar2){
       log("Intersects() bar1 must be greater than bar2");
       return -1;
@@ -328,3 +492,6 @@ int GetSignal(OrderManager* OM){
    }
    return -1;
 }
+
+
+
