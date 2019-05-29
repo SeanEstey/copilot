@@ -107,31 +107,23 @@ Impulse::Impulse(int dir, int startbar, int endbar, int len, int obibar, datetim
 //| 
 //+---------------------------------------------------------------------------+
 int SDZoneManager::FindImpulses(int iBar, int period) {
-   Impulse moves[];
+   Impulse *moves[];
    double point=MarketInfo(Symbol(),MODE_POINT);
    
    for(int i=iBar; i<iBar+period; i++) {
       if(i==iBar) {
-         // Init new impulse
-         impulse x;
-         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
-         x.start_ibar=i;
-         x.end_ibar=i;
-         x.chainlen=1;
-         x.startdt=Time[i];
-         x.enddt=Time[i];
-         x.height=(Close[i]-Open[i])/point;
-         x.ob_ibar=-1;
-         x.n_deviations=0;
-         
-         // Save it
          ArrayResize(moves, ArraySize(moves)+1);
-         moves[ArraySize(moves)-1]=x;
+         moves[ArraySize(moves)-1]=new Impulse(
+            Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0,
+            i,i,1,-1,Time[i],Time[i],
+            (Close[i]-Open[i])/point,
+            0
+         );
          continue;
       }
       
       int dir=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
-      Impulse last = moves[ArraySize(moves)-1];
+      Impulse* last = moves[ArraySize(moves)-1];
       
       // Merge properties of impulses chained together.
       // New impulse extends move by 1 bar to the left.
@@ -146,16 +138,12 @@ int SDZoneManager::FindImpulses(int iBar, int period) {
       }
       // New impulse
       else {
-         impulse x;
-         x.direction=Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0;
-         x.start_ibar=i;
-         x.end_ibar=i;
-         x.chainlen=1;
-         x.startdt=Time[i];
-         x.enddt=Time[i];
-         x.height=(Close[i]-Open[i])/point;
-         x.n_deviations=0;
-         x.ob_ibar=-1;
+         Impulse* x=new Impulse(
+            Close[i]>Open[i] ? 1 : Close[i]<Open[i] ? -1 : 0,
+            i,i,1,-1,Time[i],Time[i],
+            (Close[i]-Open[i])/point,
+            0
+         );
          ArrayResize(moves, ArraySize(moves)+1);
          moves[ArraySize(moves)-1]=x;
       }
@@ -207,7 +195,7 @@ int SDZoneManager::FindImpulses(int iBar, int period) {
 //+---------------------------------------------------------------------------+
 //| 
 //+---------------------------------------------------------------------------+
-string impulseToStr(impulse& x, double std) {
+string impulseToStr(Impulse* x, double std) {
    double point=MarketInfo(Symbol(),MODE_POINT);
    string dir= x.direction == 1 ? "upward" : x.direction==-1 ? "downward" : "sideways"; 
    string s = TimeToStr(x.startdt)+": "+(string)x.chainlen+"-chain "+dir+" impulse, height:"+DoubleToStr(x.height,2)+" pips, "+DoubleToStr(x.n_deviations,2)+"x STD. ";
